@@ -19,7 +19,7 @@ Postgres em container, API Express e SPA Vite rodam na máquina; o LLM é chamad
 
 ```bash
 bun install
-cp .env.example .env # preencha AI_GATEWAY_API_KEY
+cp .env.example .env # preencha VERCEL_GATEWAY_API_KEY
 bun run setup        # sobe o Postgres, migra, popula e cria a role read-only
 bun run dev          # api :3333 + web :5173
 ```

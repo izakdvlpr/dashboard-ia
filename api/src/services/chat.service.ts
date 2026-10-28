@@ -3,19 +3,30 @@ import { chartColumnSchema, chartSpecSchema } from "@dashboard-ia/shared";
 import { z } from "zod";
 import { generate } from "../ai/gateway.ts";
 import { answerSystemPrompt, answerUserPrompt } from "../ai/prompts.ts";
-import { answerOutputSchema } from "../ai/schemas.ts";
+import { answerOutputSchema, type QuestionRoute } from "../ai/schemas.ts";
 import { prisma } from "../db.ts";
 import { env } from "../env.ts";
+import { errors } from "../errors.ts";
 import type { QueryResult } from "../sql-guardrails/executor.ts";
 import { buildChartSpec } from "./chart-spec.service.ts";
+import { assertSafePrompt } from "./guardrail.service.ts";
+import { answerChitchat, classifyQuestion } from "./question-router.service.ts";
 import { textToSql } from "./text-to-sql.service.ts";
 
-export type ChatStep = "sql_generated" | "sql_validated" | "query_executed" | "chart_generated";
+export type ChatStep =
+	| "guardrail_checked"
+	| "classified"
+	| "answered"
+	| "sql_generated"
+	| "sql_validated"
+	| "query_executed"
+	| "chart_generated";
 
 export type ChatAnswer = {
 	conversationId: string;
 	messageId: string;
 	question: string;
+	route: QuestionRoute;
 	sql: string;
 	rawSql: string;
 	explanation: string;
@@ -25,22 +36,56 @@ export type ChatAnswer = {
 	rowCount: number;
 	durationMs: number;
 	attempts: number;
-	chartSpec: ChartSpec;
+	chartSpec: ChartSpec | null;
 	chartFallback: boolean;
 	steps: ChatStep[];
 };
 
 export async function ask(question: string, conversationId?: string): Promise<ChatAnswer> {
+	// Antes de criar qualquer registro: pergunta bloqueada não deixa rastro no histórico.
+	await assertSafePrompt(question);
+
+	const route = await classifyQuestion(question);
 	const conversation = await resolveConversation(question, conversationId);
 
 	await prisma.chatMessage.create({
 		data: { conversationId: conversation.id, role: "USER", content: question },
 	});
 
+	if (route === "chitchat") {
+		const answer = await answerChitchat(question);
+
+		const message = await prisma.chatMessage.create({
+			data: { conversationId: conversation.id, role: "ASSISTANT", content: answer },
+		});
+
+		await touchConversation(conversation.id);
+
+		return {
+			conversationId: conversation.id,
+			messageId: message.id,
+			question,
+			route,
+			sql: "",
+			rawSql: "",
+			explanation: "",
+			answer,
+			columns: [],
+			rows: [],
+			rowCount: 0,
+			durationMs: 0,
+			attempts: 0,
+			chartSpec: null,
+			chartFallback: false,
+			steps: ["guardrail_checked", "classified", "answered"],
+		};
+	}
+
 	const { result, rawSql, explanation, chartHint, attempts } = await textToSql(question);
 
-	const [{ spec, fallback }, answer] = await Promise.all([
-		buildChartSpec(question, result.columns, result.rows, chartHint),
+	// Rota `table` não chama o modelo de gráfico; o usuário pede depois via `generateChartForMessage`.
+	const [chart, answer] = await Promise.all([
+		route === "chart" ? buildChartSpec(question, result.columns, result.rows, chartHint) : null,
 		summarize(question, result),
 	]);
 
@@ -50,21 +95,33 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 			role: "ASSISTANT",
 			content: answer,
 			sql: result.sql,
-			resultJson: { columns: result.columns, rows: result.rows, chartSpec: spec },
+			resultJson: {
+				columns: result.columns,
+				rows: result.rows,
+				chartSpec: chart?.spec ?? null,
+				chartFallback: chart?.fallback ?? false,
+				chartHint,
+			},
 		},
 	});
 
-	// `@updatedAt` só dispara em update da própria linha — sem isso a lista de
-	// conversas ficaria ordenada pela criação, não pela última pergunta.
-	await prisma.conversation.update({
-		where: { id: conversation.id },
-		data: { updatedAt: new Date() },
-	});
+	await touchConversation(conversation.id);
+
+	const steps: ChatStep[] = [
+		"guardrail_checked",
+		"classified",
+		"sql_generated",
+		"sql_validated",
+		"query_executed",
+	];
+
+	if (chart) steps.push("chart_generated");
 
 	return {
 		conversationId: conversation.id,
 		messageId: message.id,
 		question,
+		route,
 		sql: result.sql,
 		rawSql,
 		explanation,
@@ -74,10 +131,56 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 		rowCount: result.rowCount,
 		durationMs: result.durationMs,
 		attempts,
-		chartSpec: spec,
-		chartFallback: fallback,
-		steps: ["sql_generated", "sql_validated", "query_executed", "chart_generated"],
+		chartSpec: chart?.spec ?? null,
+		chartFallback: chart?.fallback ?? false,
+		steps,
 	};
+}
+
+export type GeneratedChart = { chartSpec: ChartSpec; chartFallback: boolean };
+
+/**
+ * Gráfico sob demanda para uma resposta da rota `table`. Reusa as linhas salvas
+ * — não roda SQL de novo — e é idempotente: clique duplo não gasta modelo.
+ */
+export async function generateChartForMessage(messageId: string): Promise<GeneratedChart> {
+	const message = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+
+	if (message?.role !== "ASSISTANT") throw errors.notFound("Mensagem");
+
+	const parsed = messageResultSchema.safeParse(message.resultJson);
+
+	if (!parsed.success || parsed.data.rows.length === 0) {
+		throw errors.validation("Esta resposta não tem dados para gerar gráfico.");
+	}
+
+	const { columns, rows, chartSpec, chartFallback, chartHint } = parsed.data;
+
+	if (chartSpec) return { chartSpec, chartFallback: chartFallback ?? false };
+
+	const question = await prisma.chatMessage.findFirst({
+		where: { conversationId: message.conversationId, role: "USER", createdAt: { lt: message.createdAt } },
+		orderBy: { createdAt: "desc" },
+		select: { content: true },
+	});
+
+	const { spec, fallback } = await buildChartSpec(question?.content ?? "", columns, rows, chartHint ?? "bar");
+
+	await prisma.chatMessage.update({
+		where: { id: message.id },
+		data: { resultJson: { columns, rows, chartSpec: spec, chartFallback: fallback, chartHint } },
+	});
+
+	return { chartSpec: spec, chartFallback: fallback };
+}
+
+// `@updatedAt` só dispara em update da própria linha — sem isso a lista de
+// conversas ficaria ordenada pela criação, não pela última pergunta.
+async function touchConversation(id: string): Promise<void> {
+	await prisma.conversation.update({
+		where: { id },
+		data: { updatedAt: new Date() },
+	});
 }
 
 /** Resposta em linguagem natural. Se o modelo falhar, devolve o resumo trivial. */
@@ -90,7 +193,7 @@ async function summarize(question: string, result: QueryResult): Promise<string>
 
 	try {
 		const output = await generate({
-			model: env.AI_CHART_MODEL,
+			model: env.AI_SIMPLE_MODEL,
 			instructions: answerSystemPrompt(),
 			messages: [{ role: "user", content: answerUserPrompt(question, result.columns, result.rows) }],
 			schema: answerOutputSchema,
@@ -137,7 +240,9 @@ export async function listConversations() {
 const messageResultSchema = z.object({
 	columns: z.array(chartColumnSchema),
 	rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))),
-	chartSpec: chartSpecSchema,
+	chartSpec: chartSpecSchema.nullable(),
+	chartFallback: z.boolean().optional(),
+	chartHint: z.string().optional(),
 });
 
 export type ChatMessageView = {

@@ -1,7 +1,7 @@
 import type { ChartColumn, ChartSpec, QueryRow } from "@dashboard-ia/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { BookmarkIcon, LoaderIcon, SendIcon, SparklesIcon } from "lucide-react";
+import { BookmarkIcon, ChartColumnIcon, LoaderIcon, SendIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ChartCard } from "@/components/charts/chart-card.tsx";
@@ -26,6 +26,7 @@ const SUGGESTIONS = [
  * então a view é o subconjunto comum aos dois.
  */
 type AnswerView = {
+	messageId: string;
 	answer: string;
 	sql: string;
 	columns: ChartColumn[];
@@ -41,6 +42,7 @@ type Turn = { question: string; answer?: AnswerView; error?: string };
 
 function toAnswerView(data: ChatResponse): AnswerView {
 	return {
+		messageId: data.messageId,
 		answer: data.answer,
 		sql: data.sql,
 		columns: data.columns,
@@ -67,6 +69,7 @@ function toTurns(conversation: ConversationView): Turn[] {
 		if (!current) continue;
 
 		current.answer = {
+			messageId: message.id,
 			answer: message.content,
 			sql: message.sql ?? "",
 			columns: message.columns,
@@ -130,6 +133,21 @@ function ChatPage() {
 		onError: (error: ApiError) => toast.error("Falha ao salvar", { description: error.message }),
 	});
 
+	const chartMutation = useMutation({
+		mutationFn: (messageId: string) => chatApi.generateChart(messageId),
+		onSuccess: ({ chartSpec, chartFallback }, messageId) => {
+			setTurns((current) =>
+				current.map((turn) =>
+					turn.answer?.messageId === messageId
+						? { ...turn, answer: { ...turn.answer, chartSpec, chartFallback } }
+						: turn,
+				),
+			);
+			if (conversationId) void queryClient.invalidateQueries({ queryKey: ["conversations", conversationId] });
+		},
+		onError: (error: ApiError) => toast.error("Falha ao gerar gráfico", { description: error.message }),
+	});
+
 	function startNew() {
 		setConversationId(null);
 		setTurns([]);
@@ -184,14 +202,21 @@ function ChatPage() {
 					) : null}
 
 					{turns.map((turn, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: a ordem dos turnos é estável
-						<TurnBlock key={index} turn={turn} onSave={saveMutation.mutate} saving={saveMutation.isPending} />
+						<TurnBlock
+							// biome-ignore lint/suspicious/noArrayIndexKey: a ordem dos turnos é estável
+							key={index}
+							turn={turn}
+							onSave={saveMutation.mutate}
+							saving={saveMutation.isPending}
+							onGenerateChart={chartMutation.mutate}
+							generatingChart={chartMutation.isPending && chartMutation.variables === turn.answer?.messageId}
+						/>
 					))}
 
 					{askMutation.isPending ? (
 						<div className="text-muted-foreground mx-auto flex max-w-3xl items-center gap-2 text-sm">
 							<LoaderIcon className="size-4 animate-spin" />
-							Gerando SQL, validando e consultando o banco…
+							Gerando, validando e consultando o banco…
 						</div>
 					) : null}
 				</div>
@@ -223,12 +248,23 @@ function TurnBlock({
 	turn,
 	onSave,
 	saving,
+	onGenerateChart,
+	generatingChart,
 }: {
 	turn: Turn;
 	onSave: (answer: AnswerView) => void;
 	saving: boolean;
+	onGenerateChart: (messageId: string) => void;
+	generatingChart: boolean;
 }) {
 	const answer = turn.answer;
+	// Valor único (1×1) não vira gráfico útil; a rota `chart` já chega com o spec.
+	const canGenerateChart =
+		answer !== undefined &&
+		!answer.chartSpec &&
+		answer.sql !== "" &&
+		answer.rows.length >= 2 &&
+		answer.columns.length >= 2;
 
 	return (
 		<div className="mx-auto max-w-3xl space-y-3">
@@ -264,11 +300,28 @@ function TurnBlock({
 
 					{answer.columns.length > 0 ? <ResultTable columns={answer.columns} rows={answer.rows} /> : null}
 
-					<p className="text-muted-foreground font-mono text-xs tabular-nums">
-						{answer.rowCount ?? answer.rows.length} linhas
-						{answer.durationMs === undefined ? "" : ` · ${answer.durationMs} ms`}
-						{answer.chartFallback ? " · gráfico escolhido por heurística" : ""}
-					</p>
+					{canGenerateChart ? (
+						<div className="flex items-center gap-3">
+							<span className="text-muted-foreground text-sm">Quer ver isso em gráfico?</span>
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={generatingChart}
+								onClick={() => onGenerateChart(answer.messageId)}
+							>
+								{generatingChart ? <LoaderIcon className="animate-spin" /> : <ChartColumnIcon />}
+								Gerar gráfico
+							</Button>
+						</div>
+					) : null}
+
+					{answer.sql ? (
+						<p className="text-muted-foreground font-mono text-xs tabular-nums">
+							{answer.rowCount ?? answer.rows.length} linhas
+							{answer.durationMs === undefined ? "" : ` · ${answer.durationMs} ms`}
+							{answer.chartFallback ? " · gráfico escolhido por heurística" : ""}
+						</p>
+					) : null}
 				</div>
 			) : null}
 		</div>

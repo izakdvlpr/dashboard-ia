@@ -7,6 +7,9 @@ import { z } from "zod";
  * Flat e sem `.default`/`.prefault`: viram JSON Schema para o provider, e nem
  * todo provider aceita defaults ou composição. Precisam ser mantidos em
  * sincronia com os zod de `@dashboard-ia/shared` — a validação real acontece lá.
+ *
+ * Campo opcional é `.nullable()`, não `.optional()`: o strict mode da OpenAI
+ * exige toda chave em `required`. Os `null` são removidos antes da validação.
  */
 
 export const sqlOutputSchema = z.object({
@@ -20,12 +23,12 @@ export type SqlOutput = z.infer<typeof sqlOutputSchema>;
 export const chartSpecOutputSchema = z.object({
 	chartType: z.enum(CHART_TYPES),
 	title: z.string(),
-	subtitle: z.string().optional(),
+	subtitle: z.string().nullable(),
 	encoding: z.object({
-		x: z.string().optional(),
-		y: z.string().optional(),
-		category: z.string().optional(),
-		value: z.string().optional(),
+		x: z.string().nullable(),
+		y: z.string().nullable(),
+		category: z.string().nullable(),
+		value: z.string().nullable(),
 	}),
 	series: z
 		.array(
@@ -33,22 +36,30 @@ export const chartSpecOutputSchema = z.object({
 				column: z.string(),
 				label: z.string(),
 				colorToken: z.enum(COLOR_TOKENS),
-				stack: z.string().optional(),
+				stack: z.string().nullable(),
 			}),
 		)
 		.min(1)
 		.max(5),
 	options: z.object({
-		legend: z.boolean().optional(),
-		grid: z.boolean().optional(),
-		smooth: z.boolean().optional(),
-		horizontal: z.boolean().optional(),
-		dataLabels: z.boolean().optional(),
-		donut: z.boolean().optional(),
-		valueFormat: z.enum(VALUE_FORMATS).optional(),
+		legend: z.boolean().nullable(),
+		grid: z.boolean().nullable(),
+		smooth: z.boolean().nullable(),
+		horizontal: z.boolean().nullable(),
+		dataLabels: z.boolean().nullable(),
+		donut: z.boolean().nullable(),
+		valueFormat: z.enum(VALUE_FORMATS).nullable(),
 	}),
 });
 
 export const answerOutputSchema = z.object({
 	answer: z.string(),
+});
+
+export const QUESTION_ROUTES = ["chitchat", "table", "chart"] as const;
+
+export type QuestionRoute = (typeof QUESTION_ROUTES)[number];
+
+export const questionRouteSchema = z.object({
+	route: z.enum(QUESTION_ROUTES),
 });

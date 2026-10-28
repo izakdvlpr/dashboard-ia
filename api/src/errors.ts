@@ -5,6 +5,7 @@ export type ErrorCode =
 	| "SQL_EXECUTION_ERROR"
 	| "AI_UNAVAILABLE"
 	| "AI_INVALID_OUTPUT"
+	| "PROMPT_BLOCKED"
 	| "INTERNAL_ERROR";
 
 export class AppError extends Error {
@@ -29,5 +30,7 @@ export const errors = {
 	aiUnavailable: (message: string) => new AppError("AI_UNAVAILABLE", message, 503),
 	aiInvalidOutput: (message: string, details?: unknown) =>
 		new AppError("AI_INVALID_OUTPUT", message, 502, details),
+	promptBlocked: (risk: string) =>
+		new AppError("PROMPT_BLOCKED", "Não posso responder essa pergunta.", 422, { risk }),
 	internal: (message = "Erro interno.") => new AppError("INTERNAL_ERROR", message, 500),
 };

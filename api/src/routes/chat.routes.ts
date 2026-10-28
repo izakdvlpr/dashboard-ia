@@ -2,7 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { errors } from "../errors.ts";
 import { validateBody } from "../middleware/validate.ts";
-import { ask, deleteConversation, getConversation, listConversations } from "../services/chat.service.ts";
+import {
+	ask,
+	deleteConversation,
+	generateChartForMessage,
+	getConversation,
+	listConversations,
+} from "../services/chat.service.ts";
 
 const askSchema = z.object({
 	question: z.string().min(3).max(500),
@@ -15,6 +21,10 @@ chatRouter.post("/", validateBody(askSchema), async (request, response) => {
 	const { question, conversationId } = request.body as z.infer<typeof askSchema>;
 
 	response.json(await ask(question, conversationId));
+});
+
+chatRouter.post("/messages/:id/chart", async (request, response) => {
+	response.json(await generateChartForMessage(request.params.id));
 });
 
 chatRouter.get("/conversations", async (_request, response) => {

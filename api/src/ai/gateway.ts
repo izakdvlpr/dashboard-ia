@@ -10,7 +10,7 @@ import type { z } from "zod";
 import { env } from "../env.ts";
 import { errors } from "../errors.ts";
 
-export const gateway = createGateway({ apiKey: env.AI_GATEWAY_API_KEY });
+export const gateway = createGateway({ apiKey: env.VERCEL_GATEWAY_API_KEY });
 
 /** O prompt de sistema vai em `instructions`: o SDK recusa `role: "system"` dentro de `messages`. */
 export type ChatMessage = { role: "user" | "assistant"; content: string };

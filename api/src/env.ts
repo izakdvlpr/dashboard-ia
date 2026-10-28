@@ -6,9 +6,14 @@ const envSchema = z.object({
 	DATABASE_URL: z.string().min(1),
 	READONLY_DATABASE_URL: z.string().min(1),
 
-	AI_GATEWAY_API_KEY: z.string().min(1),
-	AI_SQL_MODEL: z.string().min(1).default("mistral/mistral-nemo"),
-	AI_CHART_MODEL: z.string().min(1).default("mistral/mistral-nemo"),
+	VERCEL_GATEWAY_API_KEY: z.string().min(1),
+	OLLAMA_BASE_URL: z.url().default("http://localhost:11434"),
+
+	AI_GUARDRAIL_MODEL: z.string().min(1).default("granite3-guardian:8b"),
+	AI_CLASSIFIER_MODEL: z.string().min(1).default("amazon/nova-micro"),
+	AI_SIMPLE_MODEL: z.string().min(1).default("openai/gpt-4.1-nano"),
+	AI_SQL_MODEL: z.string().min(1).default("alibaba/qwen3-coder-30b-a3b"),
+	AI_CHART_MODEL: z.string().min(1).default("openai/gpt-4.1-nano"),
 });
 
 const parsed = envSchema.safeParse(process.env);

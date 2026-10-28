@@ -13,8 +13,6 @@
 		"check:fix": "biome check --write .",
 		"lint": "biome lint .",
 		"format": "biome format --write .",
-		"db:up": "docker compose up -d",
-		"db:down": "docker compose down",
 		"db:generate": "bun run --cwd api db:generate",
 		"db:migrate": "bun run --cwd api db:migrate",
 		"db:seed": "bun run --cwd api db:seed",

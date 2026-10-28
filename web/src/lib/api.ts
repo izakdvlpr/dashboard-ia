@@ -100,6 +100,7 @@ export type ChatResponse = {
 	conversationId: string;
 	messageId: string;
 	question: string;
+	route: "chitchat" | "table" | "chart";
 	sql: string;
 	rawSql: string;
 	explanation: string;
@@ -109,7 +110,7 @@ export type ChatResponse = {
 	rowCount: number;
 	durationMs: number;
 	attempts: number;
-	chartSpec: ChartSpec;
+	chartSpec: ChartSpec | null;
 	chartFallback: boolean;
 };
 
@@ -170,6 +171,10 @@ export type ConversationView = ConversationSummary & { messages: ChatMessageView
 export const chatApi = {
 	ask: (question: string, conversationId?: string) =>
 		api<ChatResponse>("/api/chat", { method: "POST", body: { question, conversationId } }),
+	generateChart: (messageId: string) =>
+		api<{ chartSpec: ChartSpec; chartFallback: boolean }>(`/api/chat/messages/${messageId}/chart`, {
+			method: "POST",
+		}),
 	conversations: () => api<{ conversations: ConversationSummary[] }>("/api/chat/conversations"),
 	conversation: (id: string) => api<ConversationView>(`/api/chat/conversations/${id}`),
 	removeConversation: (id: string) => api<void>(`/api/chat/conversations/${id}`, { method: "DELETE" }),

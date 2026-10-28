@@ -42,7 +42,7 @@ export async function buildChartSpec(
 			});
 
 			const raw = JSON.stringify(output);
-			const parsed = chartSpecSchema.safeParse(output);
+			const parsed = chartSpecSchema.safeParse(dropNulls(output));
 
 			if (!parsed.success) {
 				messages.push({ role: "assistant", content: raw });
@@ -75,6 +75,18 @@ export async function buildChartSpec(
 	}
 
 	return { spec: heuristicSpec(question, columns, chartHint), fallback: true };
+}
+
+/** O schema de saída usa `null` para "ausente"; o do shared espera `undefined` para aplicar defaults. */
+function dropNulls(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(dropNulls);
+	if (typeof value !== "object" || value === null) return value;
+
+	return Object.fromEntries(
+		Object.entries(value)
+			.filter(([, entry]) => entry !== null)
+			.map(([key, entry]) => [key, dropNulls(entry)]),
+	);
 }
 
 /** Corrige encoding faltante — o modelo às vezes esquece x/category. */

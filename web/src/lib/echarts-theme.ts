@@ -5,11 +5,15 @@ export type ThemeMode = "light" | "dark";
 
 export const THEME_NAMES: Record<ThemeMode, string> = { light: "ds-light", dark: "ds-dark" };
 
+let probeContext: CanvasRenderingContext2D | null | undefined;
+
 /**
  * Os tokens do shadcn são `oklch(...)`. O canvas do ECharts entende oklch em
  * navegadores recentes, mas o zrender também faz cálculos próprios de cor
- * (gradientes, opacidade) que só funcionam em rgb/hex. Por isso resolvemos o
- * valor via elemento sonda: o browser converte oklch → rgb() por nós.
+ * (emphasis do hover, gradientes, opacidade) que só funcionam em rgb/hex — com
+ * oklch a linha some no hover. `getComputedStyle` não serve de conversor: os
+ * browsers atuais devolvem a cor no espaço original. Pintar 1px num canvas e
+ * ler o pixel garante sRGB.
  */
 export function resolveToken(token: ColorToken | StructuralToken): string {
 	const raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar(token)).trim();
@@ -18,17 +22,19 @@ export function resolveToken(token: ColorToken | StructuralToken): string {
 	if (raw.startsWith("#") || raw.startsWith("rgb")) return raw;
 	if (!raw.startsWith("oklch") && !raw.startsWith("hsl") && !raw.startsWith("lab")) return raw;
 
-	const probe = document.createElement("span");
+	if (probeContext === undefined) {
+		probeContext = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+	}
 
-	probe.style.display = "none";
-	probe.style.color = raw;
-	document.body.appendChild(probe);
+	if (!probeContext) return raw;
 
-	const resolved = getComputedStyle(probe).color;
+	probeContext.clearRect(0, 0, 1, 1);
+	probeContext.fillStyle = raw;
+	probeContext.fillRect(0, 0, 1, 1);
 
-	probe.remove();
+	const [r = 0, g = 0, b = 0, a = 255] = probeContext.getImageData(0, 0, 1, 1).data;
 
-	return resolved || raw;
+	return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
 }
 
 export function palette(): string[] {
