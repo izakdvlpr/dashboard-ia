@@ -14,22 +14,19 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
 	return (
 		<div className="flex min-h-svh">
-			<aside className="bg-sidebar text-sidebar-foreground sticky top-0 hidden h-svh w-56 shrink-0 flex-col border-r p-3 md:flex">
-				<div className="flex items-center gap-2 px-2 py-3">
-					<div className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-md text-xs font-bold">
-						IA
-					</div>
-					<span className="text-sm font-semibold">dashboard-ia</span>
-				</div>
+			<aside className="bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-0 hidden h-svh w-60 shrink-0 flex-col border-r px-3 py-4 md:flex">
+				<Wordmark className="px-2" />
 
-				<nav className="mt-4 flex flex-col gap-1">
+				<nav className="mt-8 flex flex-col gap-0.5">
 					{NAV.map(({ to, label, icon: Icon }) => (
 						<Link
 							key={to}
 							to={to}
 							activeOptions={{ exact: to === "/" }}
 							className={cn(
-								"text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+								"text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors",
+								// tick cobalto de 2px marca o item ativo — o único sinal de cor da sidebar
+								"before:bg-primary before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:opacity-0 data-[status=active]:before:opacity-100",
 							)}
 							activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground font-medium" }}
 						>
@@ -39,23 +36,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 					))}
 				</nav>
 
-				<div className="mt-auto flex items-center justify-between px-2">
-					<span className="text-muted-foreground text-xs">Vercel AI Gateway</span>
+				<div className="border-sidebar-border mt-auto flex items-center justify-between gap-2 border-t px-2 pt-3">
+					<span className="label-mono text-muted-foreground flex min-w-0 items-center gap-2">
+						<span aria-hidden className="bg-success size-1.5 shrink-0 rounded-full" />
+						<span className="truncate">Vercel AI Gateway</span>
+					</span>
 					<ThemeToggle />
 				</div>
 			</aside>
 
 			<div className="flex min-w-0 flex-1 flex-col">
-				<header className="bg-background/80 sticky top-0 z-10 flex items-center gap-2 border-b px-4 py-2 backdrop-blur md:hidden">
-					<span className="text-sm font-semibold">dashboard-ia</span>
-					<nav className="ml-auto flex gap-1">
+				<header className="bg-background/90 sticky top-0 z-10 flex items-center gap-2 border-b px-4 py-2 backdrop-blur-sm md:hidden">
+					<Wordmark />
+					<nav className="ml-auto flex gap-0.5">
 						{NAV.map(({ to, icon: Icon, label }) => (
 							<Link
 								key={to}
 								to={to}
 								aria-label={label}
-								className="text-muted-foreground rounded-md p-2"
-								activeProps={{ className: "bg-accent text-accent-foreground" }}
+								className="text-muted-foreground hover:text-foreground rounded-md p-2 transition-colors"
+								activeProps={{ className: "bg-accent text-primary" }}
 								activeOptions={{ exact: to === "/" }}
 							>
 								<Icon className="size-4" />
@@ -81,12 +81,26 @@ export function PageHeader({
 	action?: ReactNode;
 }) {
 	return (
-		<div className="flex flex-wrap items-end justify-between gap-3 border-b px-6 py-4">
-			<div>
-				<h1 className="text-xl font-semibold">{title}</h1>
-				{description ? <p className="text-muted-foreground text-sm">{description}</p> : null}
+		<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b px-4 pt-8 pb-5 md:px-8">
+			<div className="min-w-0 space-y-1">
+				<h1 className="text-2xl leading-tight font-semibold">{title}</h1>
+				{description ? <p className="text-muted-foreground max-w-prose text-sm">{description}</p> : null}
 			</div>
 			{action}
 		</div>
+	);
+}
+
+function Wordmark({ className }: { className?: string }) {
+	return (
+		<Link to="/" className={cn("flex shrink-0 items-center gap-2.5 rounded-md whitespace-nowrap", className)}>
+			<span className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-md font-mono text-[11px] font-medium">
+				IA
+			</span>
+			{/* em 320px o header mobile não comporta wordmark + 4 ícones + toggle */}
+			<span className="font-display text-[15px] font-semibold tracking-tight max-[359px]:sr-only">
+				dashboard-ia
+			</span>
+		</Link>
 	);
 }

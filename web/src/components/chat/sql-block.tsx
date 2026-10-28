@@ -12,17 +12,18 @@ export function SqlBlock({ sql, attempts }: { sql: string; attempts?: number }) 
 	}
 
 	return (
-		<details className="group bg-muted/40 rounded-md border">
-			<summary className="text-muted-foreground flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium">
+		<details className="group bg-graphite text-graphite-foreground border-graphite-border rounded-xl border">
+			<summary className="label-mono text-graphite-muted hover:text-graphite-foreground flex cursor-pointer list-none items-center gap-2 px-3 py-2 transition-colors">
 				<ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
 				SQL executado
 				{attempts && attempts > 1 ? (
-					<span className="text-amber-600 dark:text-amber-400">({attempts} tentativas)</span>
+					<span className="text-graphite-warning">· {attempts} tentativas</span>
 				) : null}
 				<Button
 					variant="ghost"
 					size="sm"
-					className="ml-auto h-6"
+					aria-label={copied ? "SQL copiado" : "Copiar SQL"}
+					className="text-graphite-muted hover:text-graphite-foreground ml-auto h-6 hover:bg-graphite-border"
 					onClick={(event) => {
 						event.preventDefault();
 						void copy();
@@ -31,7 +32,7 @@ export function SqlBlock({ sql, attempts }: { sql: string; attempts?: number }) 
 					{copied ? <CheckIcon /> : <CopyIcon />}
 				</Button>
 			</summary>
-			<pre className="overflow-x-auto border-t px-3 py-2 text-xs leading-relaxed">
+			<pre className="border-graphite-border overflow-x-auto border-t px-4 py-3 font-mono text-xs leading-relaxed">
 				<code>{sql}</code>
 			</pre>
 		</details>

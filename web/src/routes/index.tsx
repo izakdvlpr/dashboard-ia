@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { ChartCard } from "@/components/charts/chart-card.tsx";
-import { KpiTile, KpiTileSkeleton } from "@/components/charts/kpi-tile.tsx";
+import { KpiStrip, KpiTile, KpiTileSkeleton } from "@/components/charts/kpi-tile.tsx";
 import { PinnedGrid } from "@/components/charts/pinned-grid.tsx";
 import { PageHeader } from "@/components/layout/app-shell.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
@@ -154,7 +154,7 @@ function OverviewPage() {
 		<>
 			<PageHeader
 				title="Visão geral"
-				description="E-commerce fictício — dados direto do Postgres."
+				description="E-commerce fictício. Cada número vem de um SELECT direto no Postgres."
 				action={
 					<Select value={months} onValueChange={setMonths}>
 						<SelectTrigger size="sm" className="w-48">
@@ -171,14 +171,14 @@ function OverviewPage() {
 				}
 			/>
 
-			<div className="space-y-4 p-6">
-				<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			<div className="space-y-8 px-4 py-6 md:px-8 md:py-8">
+				<KpiStrip>
 					{overview.isLoading || !overview.data
 						? [0, 1, 2, 3].map((index) => <KpiTileSkeleton key={index} />)
 						: overview.data.kpis.map((kpi) => <KpiTile key={kpi.key} kpi={kpi} />)}
-				</div>
+				</KpiStrip>
 
-				<div className="grid gap-4 xl:grid-cols-2">
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[repeat(2,minmax(0,1fr))]">
 					{OVERVIEW.map((entry) => (
 						<SeriesChart key={entry.key} entry={entry} months={range} />
 					))}

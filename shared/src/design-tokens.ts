@@ -17,6 +17,8 @@ export const STRUCTURAL_TOKENS = [
 	"popover-foreground",
 	"radius",
 	"font-sans",
+	"font-display",
+	"font-mono",
 ] as const;
 
 export type StructuralToken = (typeof STRUCTURAL_TOKENS)[number];

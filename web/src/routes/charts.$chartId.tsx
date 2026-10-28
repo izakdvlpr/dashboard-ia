@@ -35,7 +35,7 @@ function ChartDetail() {
 		return (
 			<>
 				<PageHeader title="Gráfico" />
-				<div className="space-y-4 p-6">
+				<div className="space-y-5 px-4 py-6 md:px-8">
 					<Skeleton className="h-96" />
 					<Skeleton className="h-40" />
 				</div>
@@ -221,14 +221,14 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 				}
 			/>
 
-			<div className="grid gap-4 p-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+			<div className="grid grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
 				<div className="space-y-4">
 					<ChartCard spec={spec} rows={dataset.rows} optionPatch={optionPatch} height={420} />
 
 					<Card>
 						<CardContent className="space-y-2">
 							<div className="flex items-center justify-between">
-								<span className="text-muted-foreground text-xs font-medium">Consulta SQL</span>
+								<span className="label-mono text-muted-foreground">Consulta SQL</span>
 								<Button
 									size="sm"
 									variant="outline"
@@ -257,7 +257,7 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 
 					<ResultTable columns={dataset.columns} rows={dataset.rows} />
 
-					<p className="text-muted-foreground text-xs">
+					<p className="text-muted-foreground font-mono text-xs tabular-nums">
 						{dataset.rows.length} linhas · criado em {formatStamp(chart.createdAt)}
 						{chart.datasetCacheAt ? ` · dados de ${formatStamp(chart.datasetCacheAt)}` : ""}
 					</p>
@@ -301,7 +301,7 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 						</div>
 
 						<div className="space-y-2 border-t pt-4">
-							<span className="text-muted-foreground text-xs font-medium">Estilo</span>
+							<span className="label-mono text-muted-foreground">Estilo</span>
 							<StylePanel active={tweaks} onToggle={toggleTweak} />
 							<PresetBar
 								chartType={spec.chartType}

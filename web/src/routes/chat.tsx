@@ -161,15 +161,22 @@ function ChatPage() {
 					description="Pergunte em português — a IA gera o SQL, os guardrails validam e o Postgres responde."
 				/>
 
-				<div className="flex-1 space-y-6 overflow-y-auto p-6">
+				<div className="flex-1 space-y-6 overflow-y-auto px-4 py-6 md:px-8">
 					{turns.length === 0 && !openMutation.isPending ? (
 						<div className="text-muted-foreground mx-auto max-w-2xl space-y-4 pt-12 text-center">
 							<SparklesIcon className="mx-auto size-8" />
 							<p className="text-sm">Comece por uma dessas perguntas:</p>
 							<div className="flex flex-wrap justify-center gap-2">
 								{SUGGESTIONS.map((suggestion) => (
-									<Button key={suggestion} variant="outline" size="sm" onClick={() => submit(suggestion)}>
-										{suggestion}
+									<Button
+										key={suggestion}
+										variant="outline"
+										size="sm"
+										title={suggestion}
+										className="max-w-full"
+										onClick={() => submit(suggestion)}
+									>
+										<span className="truncate">{suggestion}</span>
 									</Button>
 								))}
 							</div>
@@ -257,7 +264,7 @@ function TurnBlock({
 
 					{answer.columns.length > 0 ? <ResultTable columns={answer.columns} rows={answer.rows} /> : null}
 
-					<p className="text-muted-foreground text-xs">
+					<p className="text-muted-foreground font-mono text-xs tabular-nums">
 						{answer.rowCount ?? answer.rows.length} linhas
 						{answer.durationMs === undefined ? "" : ` · ${answer.durationMs} ms`}
 						{answer.chartFallback ? " · gráfico escolhido por heurística" : ""}

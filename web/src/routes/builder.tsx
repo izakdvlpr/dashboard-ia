@@ -103,7 +103,7 @@ function BuilderPage() {
 				}
 			/>
 
-			<div className="grid gap-4 p-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+			<div className="grid grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
 				<div className="space-y-4">
 					<Card>
 						<CardContent className="space-y-3">
@@ -119,7 +119,7 @@ function BuilderPage() {
 									<PlayIcon />
 									Executar
 								</Button>
-								<span className="text-muted-foreground text-xs">
+								<span className="text-muted-foreground font-mono text-xs tabular-nums">
 									{result
 										? `${result.rowCount} linhas · ${result.durationMs} ms`
 										: "Somente SELECT nas tabelas do e-commerce."}
@@ -149,7 +149,7 @@ function BuilderPage() {
 							<CardContent className="space-y-4">
 								<ChartEditor spec={spec} columns={result.columns} onChange={setSpec} />
 								<div className="space-y-2 border-t pt-4">
-									<span className="text-muted-foreground text-xs font-medium">Estilo</span>
+									<span className="label-mono text-muted-foreground">Estilo</span>
 									<StylePanel active={tweaks} onToggle={toggleTweak} />
 									<PresetBar
 										chartType={spec.chartType}
@@ -165,8 +165,8 @@ function BuilderPage() {
 
 					<Card>
 						<CardContent className="space-y-3">
-							<span className="text-muted-foreground text-xs font-medium">Tabelas disponíveis</span>
-							<div className="space-y-2 text-xs">
+							<span className="label-mono text-muted-foreground">Tabelas disponíveis</span>
+							<div className="space-y-2 font-mono text-xs">
 								{catalog.data?.tables.map((table) => (
 									<details key={table.name}>
 										<summary className="cursor-pointer font-medium">{table.name}</summary>

@@ -11,14 +11,14 @@ type EChartProps = {
 
 /**
  * O tema do ECharts é imutável depois que a instância nasce — trocar light/dark
- * remonta o componente via `key`, que é justamente o nome do tema registrado.
+ * remonta o componente via `key` (tema + estado das webfonts).
  */
 export function EChart({ option, className, height = 300 }: EChartProps) {
-	const { echartsTheme } = useTheme();
+	const { echartsTheme, chartKey } = useTheme();
 
 	return (
 		<ReactECharts
-			key={echartsTheme}
+			key={chartKey}
 			theme={echartsTheme}
 			option={option}
 			notMerge

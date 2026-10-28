@@ -1,0 +1,9 @@
+{
+  "scannedAt": "2026-10-28",
+  "framework": "Vite + React 19 + TanStack Router",
+  "styling": "Tailwind v4 (@theme inline, web/src/styles.css), shadcn tokens em OKLCH",
+  "fonts": "Space Grotesk + Inter + JetBrains Mono (Google Fonts, web/index.html)",
+  "motion": "motion-cut (só tw-animate-css)",
+  "charts": "ECharts, tema gerado dos CSS vars (web/src/lib/echarts-theme.ts)",
+  "preserve": ["nomes de tokens shadcn", "chart-1..5 (contrato com a IA)", "toggle light/dark", "rotas e componentes"]
+}

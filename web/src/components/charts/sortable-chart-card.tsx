@@ -28,7 +28,11 @@ export function SortableChartCard({ chart, editing, onToggleSpan, onUnpin }: Sor
 		<div
 			ref={setNodeRef}
 			style={{ transform: CSS.Transform.toString(transform), transition }}
-			className={cn("space-y-2", chart.layoutSpan === 2 && "xl:col-span-2", isDragging && "z-10 opacity-70")}
+			className={cn(
+				"group min-w-0 space-y-2",
+				chart.layoutSpan === 2 && "xl:col-span-2",
+				isDragging && "z-10 opacity-70",
+			)}
 		>
 			<div className="flex items-center gap-2">
 				{editing ? (
@@ -46,7 +50,7 @@ export function SortableChartCard({ chart, editing, onToggleSpan, onUnpin }: Sor
 				<Link
 					to="/charts/$chartId"
 					params={{ chartId: chart.id }}
-					className="truncate text-sm font-medium hover:underline"
+					className="font-display hover:text-primary truncate text-sm font-semibold transition-colors"
 				>
 					{chart.title}
 				</Link>
@@ -83,7 +87,12 @@ export function SortableChartCard({ chart, editing, onToggleSpan, onUnpin }: Sor
 				</div>
 			</div>
 
-			<ChartCard spec={chart.chartSpec} rows={chart.rows} height={chart.layoutSpan === 2 ? 320 : 280} />
+			<ChartCard
+				spec={chart.chartSpec}
+				rows={chart.rows}
+				height={chart.layoutSpan === 2 ? 320 : 280}
+				className="group-hover:border-primary/40 transition-colors"
+			/>
 		</div>
 	);
 }

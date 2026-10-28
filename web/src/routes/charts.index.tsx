@@ -44,7 +44,7 @@ function ChartsGallery() {
 		return (
 			<>
 				<PageHeader title="Gráficos" />
-				<div className="grid gap-4 p-6 xl:grid-cols-2">
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 md:px-8 xl:grid-cols-[repeat(2,minmax(0,1fr))]">
 					{[0, 1].map((index) => (
 						<Skeleton key={index} className="h-72" />
 					))}
@@ -78,14 +78,14 @@ function ChartsGallery() {
 					</CardContent>
 				</Card>
 			) : (
-				<div className="grid gap-4 p-6 xl:grid-cols-2">
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6 md:px-8 xl:grid-cols-[repeat(2,minmax(0,1fr))]">
 					{list.map((chart) => (
-						<div key={chart.id} className="space-y-2">
+						<div key={chart.id} className="group min-w-0 space-y-2">
 							<div className="flex items-center gap-2">
 								<Link
 									to="/charts/$chartId"
 									params={{ chartId: chart.id }}
-									className="text-sm font-medium hover:underline"
+									className="font-display hover:text-primary truncate text-sm font-semibold transition-colors"
 								>
 									{chart.title}
 								</Link>
@@ -119,7 +119,12 @@ function ChartsGallery() {
 								</div>
 							</div>
 
-							<ChartCard spec={chart.chartSpec} rows={chart.rows} height={280} />
+							<ChartCard
+								spec={chart.chartSpec}
+								rows={chart.rows}
+								height={280}
+								className="group-hover:border-primary/40 transition-colors"
+							/>
 						</div>
 					))}
 				</div>

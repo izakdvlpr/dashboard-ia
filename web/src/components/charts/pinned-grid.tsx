@@ -101,10 +101,12 @@ export function PinnedGrid({
 	}
 
 	return (
-		<section className="space-y-3">
-			<div className="flex items-center gap-2">
-				<h2 className="text-sm font-medium">Meus gráficos</h2>
-				<span className="text-muted-foreground text-xs">{charts.length}</span>
+		<section className="space-y-4">
+			<div className="flex flex-wrap items-center gap-x-2.5 gap-y-3">
+				<h2 className="text-lg font-semibold">Meus gráficos</h2>
+				<span className="label-mono bg-muted text-muted-foreground rounded-sm px-1.5 py-0.5 tabular-nums">
+					{charts.length}
+				</span>
 
 				<div className="ml-auto flex gap-2">
 					<Button
@@ -135,11 +137,11 @@ export function PinnedGrid({
 						<p>Nenhum gráfico na visão geral ainda.</p>
 						<p className="text-xs">
 							Marque "Mostrar na visão geral" em{" "}
-							<Link to="/charts" className="underline">
+							<Link to="/charts" className="text-primary underline-offset-4 hover:underline">
 								Gráficos
 							</Link>{" "}
 							ou monte um no{" "}
-							<Link to="/builder" className="underline">
+							<Link to="/builder" className="text-primary underline-offset-4 hover:underline">
 								construtor
 							</Link>
 							.
@@ -149,7 +151,7 @@ export function PinnedGrid({
 			) : (
 				<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
 					<SortableContext items={charts.map((chart) => chart.id)} strategy={rectSortingStrategy}>
-						<div className="grid gap-4 xl:grid-cols-2">
+						<div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[repeat(2,minmax(0,1fr))]">
 							{charts.map((chart) => (
 								<SortableChartCard
 									key={chart.id}

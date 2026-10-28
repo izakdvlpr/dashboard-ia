@@ -52,13 +52,16 @@ function buildTheme() {
 	const foreground = resolveToken("foreground");
 	const popover = resolveToken("popover");
 	const popoverForeground = resolveToken("popover-foreground");
-	const fontFamily = getComputedStyle(document.body).fontFamily || "ui-sans-serif, system-ui, sans-serif";
+	const fontFamily = resolveToken("font-sans") || "ui-sans-serif, system-ui, sans-serif";
+	const displayFamily = resolveToken("font-display") || fontFamily;
+	const monoFamily = resolveToken("font-mono") || "ui-monospace, monospace";
 
+	// eixos em mono: números alinham e o gráfico lê como instrumento
 	const axis = {
 		axisLine: { lineStyle: { color: border } },
 		axisTick: { show: false },
-		axisLabel: { color: muted, fontSize: 11 },
-		splitLine: { lineStyle: { color: border, type: "dashed" as const } },
+		axisLabel: { color: muted, fontSize: 11, fontFamily: monoFamily },
+		splitLine: { lineStyle: { color: border, type: "solid" as const } },
 	};
 
 	return {
@@ -66,16 +69,25 @@ function buildTheme() {
 		backgroundColor: "transparent",
 		textStyle: { fontFamily, color: foreground },
 		title: {
-			textStyle: { color: foreground, fontSize: 14, fontWeight: 600 },
-			subtextStyle: { color: muted, fontSize: 12 },
+			left: 12,
+			top: 4,
+			textStyle: { color: foreground, fontSize: 15, fontWeight: 600, fontFamily: displayFamily },
+			subtextStyle: { color: muted, fontSize: 12, fontFamily },
 		},
-		legend: { textStyle: { color: muted }, icon: "roundRect", itemWidth: 10, itemHeight: 10 },
+		legend: {
+			textStyle: { color: muted, fontFamily: monoFamily, fontSize: 11 },
+			icon: "roundRect",
+			itemWidth: 10,
+			itemHeight: 10,
+		},
 		tooltip: {
 			backgroundColor: popover,
 			borderColor: border,
 			borderWidth: 1,
-			textStyle: { color: popoverForeground, fontSize: 12 },
-			axisPointer: { lineStyle: { color: border }, crossStyle: { color: border } },
+			padding: [8, 10],
+			extraCssText: "border-radius: 6px; box-shadow: none;",
+			textStyle: { color: popoverForeground, fontSize: 12, fontFamily },
+			axisPointer: { lineStyle: { color: muted }, crossStyle: { color: muted } },
 		},
 		grid: { borderColor: border },
 		categoryAxis: axis,
