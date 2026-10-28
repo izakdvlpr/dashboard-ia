@@ -1,0 +1,10 @@
+node_modules
+dist
+.output
+.env
+.env.local
+*.log
+.DS_Store
+api/prisma/generated
+web/src/routeTree.gen.ts
+.logs

@@ -1,0 +1,28 @@
+{
+	"name": "dashboard-ia",
+	"private": true,
+	"type": "module",
+	"workspaces": ["shared", "api", "web"],
+	"scripts": {
+		"dev": "bun run --filter '*' dev",
+		"dev:api": "bun run --cwd api dev",
+		"dev:web": "bun run --cwd web dev",
+		"build": "bun run --cwd api build && bun run --cwd web build",
+		"types": "bun run --cwd api types && bun run --cwd web types",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"lint": "biome lint .",
+		"format": "biome format --write .",
+		"db:up": "docker compose up -d",
+		"db:down": "docker compose down",
+		"db:generate": "bun run --cwd api db:generate",
+		"db:migrate": "bun run --cwd api db:migrate",
+		"db:seed": "bun run --cwd api db:seed",
+		"db:readonly": "bun run --cwd api db:readonly",
+		"db:studio": "bun run --cwd api db:studio",
+		"setup": "bun run db:up && sleep 4 && bun run db:migrate && bun run db:seed && bun run db:readonly"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.0"
+	}
+}

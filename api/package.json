@@ -1,0 +1,40 @@
+{
+	"name": "@dashboard-ia/api",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "dotenv -e ../.env -- tsx watch src/index.ts",
+		"start": "dotenv -e ../.env -- tsx src/index.ts",
+		"build": "tsc --noEmit",
+		"types": "tsc --noEmit",
+		"db:generate": "dotenv -e ../.env -- prisma generate",
+		"db:migrate": "dotenv -e ../.env -- prisma migrate dev",
+		"db:push": "dotenv -e ../.env -- prisma db push",
+		"db:studio": "dotenv -e ../.env -- prisma studio",
+		"db:seed": "dotenv -e ../.env -- tsx prisma/seed.ts",
+		"db:readonly": "dotenv -e ../.env -- sh -c 'psql \"$DATABASE_URL\" -f prisma/sql/readonly-role.sql'"
+	},
+	"dependencies": {
+		"@dashboard-ia/shared": "workspace:*",
+		"@prisma/adapter-pg": "^7.9.1",
+		"@prisma/client": "^7.9.1",
+		"ai": "^7.0.155",
+		"cors": "^2.8.5",
+		"express": "^5.2.1",
+		"node-sql-parser": "^5.4.0",
+		"pg": "^8.16.3",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@faker-js/faker": "^10.5.0",
+		"@types/cors": "^2.8.19",
+		"@types/express": "^5.0.6",
+		"@types/node": "^22.10.2",
+		"@types/pg": "^8.15.5",
+		"dotenv-cli": "^11.0.0",
+		"prisma": "^7.9.1",
+		"tsx": "^4.21.0",
+		"typescript": "^5.9.3"
+	}
+}

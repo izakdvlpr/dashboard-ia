@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Domínio e-commerce (dados fictícios) — únicas tabelas visíveis ao SQL da IA
+// ---------------------------------------------------------------------------
+
+model Region {
+  id        String     @id @default(cuid())
+  name      String
+  code      String     @unique
+  country   String     @default("BR")
+  customers Customer[]
+  orders    Order[]
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String
+  slug     String    @unique
+  products Product[]
+}
+
+model Product {
+  id            String      @id @default(cuid())
+  sku           String      @unique
+  name          String
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+  price         Decimal     @db.Decimal(10, 2)
+  cost          Decimal     @db.Decimal(10, 2)
+  stockQuantity Int         @default(0)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  orderItems    OrderItem[]
+
+  @@index([categoryId])
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  regionId   String
+  region     Region   @relation(fields: [regionId], references: [id])
+  signupDate DateTime
+  orders     Order[]
+
+  @@index([regionId])
+  @@index([signupDate])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELED
+  REFUNDED
+}
+
+enum OrderChannel {
+  WEB
+  MOBILE
+  MARKETPLACE
+  IN_STORE
+}
+
+model Order {
+  id          String       @id @default(cuid())
+  orderNumber String       @unique
+  customerId  String
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  // snapshot da região de entrega no momento do pedido
+  regionId    String
+  region      Region       @relation(fields: [regionId], references: [id])
+  status      OrderStatus  @default(PENDING)
+  channel     OrderChannel @default(WEB)
+  shippingFee Decimal      @default(0) @db.Decimal(10, 2)
+  placedAt    DateTime
+  items       OrderItem[]
+  events      OrderEvent[]
+
+  @@index([placedAt])
+  @@index([status])
+  @@index([channel])
+  @@index([customerId])
+  @@index([regionId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  discount  Decimal @default(0) @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// log de transição de status — alimenta o gráfico de funil
+model OrderEvent {
+  id         String      @id @default(cuid())
+  orderId    String
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status     OrderStatus
+  occurredAt DateTime
+
+  @@index([orderId])
+  @@index([status, occurredAt])
+}
+
+// ---------------------------------------------------------------------------
+// Estado do app — NUNCA acessível pelo SQL gerado pela IA
+// (fora do allowlist e sem GRANT para a role read-only)
+// ---------------------------------------------------------------------------
+
+enum ChartSource {
+  AI
+  MANUAL
+}
+
+model Chart {
+  id             String        @id @default(cuid())
+  title          String
+  description    String?
+  chartType      String
+  /// ChartRecord: { chartSpec, columns, rows }
+  spec           Json
+  source         ChartSource   @default(MANUAL)
+  /// SELECT sanitizado que produz o dataset (null = dataset estático)
+  sqlQuery       String?
+  datasetCacheAt DateTime?
+  presetId       String?
+  preset         ChartPreset?  @relation(fields: [presetId], references: [id], onDelete: SetNull)
+  /// fixado = aparece na visão geral
+  isPinned       Boolean       @default(false)
+  pinnedOrder    Int?
+  /// largura no grid da visão geral: 1 = metade, 2 = linha inteira
+  layoutSpan     Int           @default(1)
+  messages       ChatMessage[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([source])
+  @@index([isPinned, pinnedOrder])
+}
+
+model ChartPreset {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  /// null = aplicável a qualquer tipo de gráfico
+  chartType       String?
+  /// EChartsOption parcial, deep-merged sobre a option base
+  optionPatch     Json
+  isGlobalDefault Boolean  @default(false)
+  charts          Chart[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([chartType])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model Conversation {
+  id        String        @id @default(cuid())
+  title     String?
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  /// SQL sanitizado desta rodada (apenas mensagens do assistente)
+  sql            String?
+  /// { columns, rows } do resultado, para reabrir a conversa sem reexecutar
+  resultJson     Json?
+  chartId        String?
+  chart          Chart?       @relation(fields: [chartId], references: [id], onDelete: SetNull)
+  queryLogs      QueryLog[]
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+enum QueryStatus {
+  REJECTED
+  EXECUTED
+  EXECUTION_ERROR
+}
+
+model QueryLog {
+  id              String       @id @default(cuid())
+  chatMessageId   String?
+  chatMessage     ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  question        String?
+  attempt         Int          @default(1)
+  /// exatamente o que o modelo produziu
+  rawSql          String
+  /// o que de fato rodou, pós-guardrails (null se rejeitado)
+  sanitizedSql    String?
+  status          QueryStatus
+  rejectionReason String?
+  rowCount        Int?
+  durationMs      Int?
+  model           String?
+  createdAt       DateTime     @default(now())
+
+  @@index([chatMessageId])
+  @@index([status, createdAt])
+}
