@@ -1,11 +1,10 @@
-import type { ChartSpec, Preset } from "@dashboard-ia/shared";
+import type { ChartSpec, Preset, QuerySpec } from "@dashboard-ia/shared";
 import { mergeOption } from "@dashboard-ia/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
 	ArrowLeftIcon,
 	LayoutDashboardIcon,
-	PlayIcon,
 	RefreshCwIcon,
 	SaveIcon,
 	SparklesIcon,
@@ -16,6 +15,7 @@ import { toast } from "sonner";
 import { ChartCard } from "@/components/charts/chart-card.tsx";
 import { ChartEditor, Field } from "@/components/charts/chart-editor.tsx";
 import { PresetBar } from "@/components/charts/preset-bar.tsx";
+import { DEFAULT_QUERY_SPEC, QuerySpecForm } from "@/components/charts/query-spec-form.tsx";
 import { StylePanel, type StyleTweakKey, tweaksToPatch } from "@/components/charts/style-panel.tsx";
 import { ResultTable } from "@/components/chat/result-table.tsx";
 import { PageHeader } from "@/components/layout/app-shell.tsx";
@@ -68,10 +68,10 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 	const [preset, setPreset] = useState<Preset | null>(null);
 	const [tweaks, setTweaks] = useState<ReadonlySet<StyleTweakKey>>(new Set());
 	const [description, setDescription] = useState(chart.description ?? "");
-	const [sql, setSql] = useState(chart.sqlQuery ?? "");
+	const [querySpec, setQuerySpec] = useState<QuerySpec | null>(chart.querySpec);
 	const [isPinned, setIsPinned] = useState(chart.isPinned);
 	const [layoutSpan, setLayoutSpan] = useState(chart.layoutSpan);
-	// Dataset local: executar o SQL troca o preview antes de salvar.
+	// Dataset local: executar a consulta troca o preview antes de salvar.
 	const [dataset, setDataset] = useState({ columns: chart.columns, rows: chart.rows });
 	const [datasetDirty, setDatasetDirty] = useState(false);
 
@@ -97,7 +97,7 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 		spec !== chart.chartSpec ||
 		(preset?.id ?? null) !== chart.presetId ||
 		description !== (chart.description ?? "") ||
-		sql !== (chart.sqlQuery ?? "") ||
+		querySpec !== chart.querySpec ||
 		isPinned !== chart.isPinned ||
 		layoutSpan !== chart.layoutSpan ||
 		datasetDirty;
@@ -105,7 +105,7 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 	function adopt(updated: ChartDto) {
 		queryClient.setQueryData(["charts", chart.id], updated);
 		void queryClient.invalidateQueries({ queryKey: ["charts"] });
-		setSql(updated.sqlQuery ?? "");
+		setQuerySpec(updated.querySpec);
 		setDataset({ columns: updated.columns, rows: updated.rows });
 		setDatasetDirty(false);
 	}
@@ -119,10 +119,11 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 		onError: (error: ApiError) => toast.error("Falha ao reexecutar", { description: error.message }),
 	});
 
-	/** Testa o SQL editado pelos mesmos guardrails do construtor, sem gravar nada. */
-	const sqlMutation = useMutation({
-		mutationFn: () => queryApi.run(sql),
-		onSuccess: (result) => {
+	/** Testa a consulta editada pelo mesmo caminho do construtor, sem gravar nada. */
+	const specMutation = useMutation({
+		mutationFn: async (next: QuerySpec) => ({ spec: next, result: await queryApi.run(next) }),
+		onSuccess: ({ spec: next, result }) => {
+			setQuerySpec(next);
 			setDataset({ columns: result.columns, rows: result.rows });
 			setDatasetDirty(true);
 			toast.success("Consulta executada", {
@@ -140,7 +141,7 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 				description: description.trim() || null,
 				chartSpec: spec,
 				presetId: preset?.id ?? null,
-				sqlQuery: sql.trim() || null,
+				querySpec,
 				columns: dataset.columns,
 				rows: dataset.rows,
 				isPinned,
@@ -194,7 +195,7 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 						<Button
 							size="sm"
 							variant="outline"
-							disabled={!chart.sqlQuery || runMutation.isPending}
+							disabled={!chart.querySpec || runMutation.isPending}
 							onClick={() => runMutation.mutate()}
 						>
 							<RefreshCwIcon className={runMutation.isPending ? "animate-spin" : undefined} />
@@ -226,32 +227,21 @@ function ChartWorkspace({ chart }: { chart: ChartDto }) {
 					<ChartCard spec={spec} rows={dataset.rows} optionPatch={optionPatch} height={420} />
 
 					<Card>
-						<CardContent className="space-y-2">
-							<div className="flex items-center justify-between">
-								<span className="label-mono text-muted-foreground">Consulta SQL</span>
-								<Button
-									size="sm"
-									variant="outline"
-									disabled={!sql.trim() || sqlMutation.isPending}
-									onClick={() => sqlMutation.mutate()}
-								>
-									<PlayIcon />
-									Executar
-								</Button>
-							</div>
-							<textarea
-								value={sql}
-								onChange={(event) => setSql(event.target.value)}
-								spellCheck={false}
-								rows={8}
-								placeholder="SELECT ... — somente leitura, passa pelos guardrails."
-								className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full rounded-md border bg-transparent p-3 font-mono text-xs outline-none focus-visible:ring-[3px]"
-							/>
-							{datasetDirty ? (
+						<CardContent className="space-y-3">
+							<span className="label-mono text-muted-foreground">Consulta</span>
+							{chart.querySpec ? null : (
 								<p className="text-muted-foreground text-xs">
-									Preview com os dados da última execução. Salve para gravar.
+									Este gráfico não tem consulta salva — os dados são estáticos até você executar uma.
 								</p>
-							) : null}
+							)}
+							<QuerySpecForm
+								defaultValues={chart.querySpec ?? DEFAULT_QUERY_SPEC}
+								onRun={(next) => specMutation.mutate(next)}
+								isPending={specMutation.isPending}
+								status={
+									datasetDirty ? "Preview com os dados da última execução. Salve para gravar." : undefined
+								}
+							/>
 						</CardContent>
 					</Card>
 

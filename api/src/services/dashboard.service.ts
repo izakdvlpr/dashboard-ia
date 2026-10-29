@@ -1,16 +1,11 @@
 import { Prisma } from "@/prisma/generated/client.ts";
 import { prisma } from "../db.ts";
+import { REVENUE, VALID_ORDER } from "../semantic/registry.ts";
 
 /**
  * Consultas fixas do dashboard, escritas à mão (não passam pela IA nem pelos
  * guardrails): são rápidas, previsíveis e não precisam de sandbox.
  */
-
-/** Receita de um item = quantidade * preço unitário - desconto. */
-const REVENUE = Prisma.sql`SUM(oi."quantity" * oi."unitPrice" - oi."discount")::float8`;
-
-/** Pedidos cancelados/estornados não contam como receita. */
-const VALID_ORDER = Prisma.sql`o."status" NOT IN ('CANCELED', 'REFUNDED')`;
 
 export type DateRange = { from: Date; to: Date };
 

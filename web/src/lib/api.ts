@@ -1,4 +1,13 @@
-import type { ChartColumn, ChartSpec, ChartType, Preset, QueryRow } from "@dashboard-ia/shared";
+import type {
+	ChartColumn,
+	ChartSpec,
+	ChartType,
+	Preset,
+	QueryRow,
+	QuerySpec,
+	QuerySpecInput,
+	SemanticCatalog,
+} from "@dashboard-ia/shared";
 
 const BASE_URL = "http://localhost:3333";
 
@@ -67,19 +76,10 @@ export type SeriesResponse = {
 };
 
 export type QueryResult = {
-	sql: string;
 	columns: ChartColumn[];
 	rows: QueryRow[];
 	rowCount: number;
 	durationMs: number;
-};
-
-export type SchemaCatalog = {
-	tables: Array<{
-		name: string;
-		columns: Array<{ name: string; type: string; nullable: boolean }>;
-	}>;
-	enums: Array<{ name: string; values: string[] }>;
 };
 
 export const dashboardApi = {
@@ -89,11 +89,11 @@ export const dashboardApi = {
 };
 
 export const queryApi = {
-	run: (sql: string) => api<QueryResult>("/api/query/run", { method: "POST", body: { sql } }),
+	run: (spec: QuerySpecInput) => api<QueryResult>("/api/query/run", { method: "POST", body: { spec } }),
 };
 
 export const schemaApi = {
-	catalog: () => api<SchemaCatalog>("/api/schema"),
+	catalog: () => api<SemanticCatalog>("/api/schema"),
 };
 
 export type ChatResponse = {
@@ -101,8 +101,7 @@ export type ChatResponse = {
 	messageId: string;
 	question: string;
 	route: "chitchat" | "table" | "chart";
-	sql: string;
-	rawSql: string;
+	querySpec: QuerySpec | null;
 	explanation: string;
 	answer: string;
 	columns: ChartColumn[];
@@ -120,7 +119,7 @@ export type ChartDto = {
 	description: string | null;
 	chartType: string;
 	source: "AI" | "MANUAL";
-	sqlQuery: string | null;
+	querySpec: QuerySpec | null;
 	presetId: string | null;
 	isPinned: boolean;
 	pinnedOrder: number | null;
@@ -138,7 +137,7 @@ export type CreateChartInput = {
 	title: string;
 	description?: string | null;
 	source: "AI" | "MANUAL";
-	sqlQuery?: string | null;
+	querySpec?: QuerySpecInput | null;
 	chartSpec: ChartSpec;
 	columns: ChartColumn[];
 	rows: QueryRow[];
@@ -159,7 +158,7 @@ export type ChatMessageView = {
 	id: string;
 	role: "USER" | "ASSISTANT";
 	content: string;
-	sql: string | null;
+	querySpec: QuerySpec | null;
 	columns: ChartColumn[];
 	rows: QueryRow[];
 	chartSpec: ChartSpec | null;

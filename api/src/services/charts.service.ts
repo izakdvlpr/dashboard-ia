@@ -1,16 +1,16 @@
-import type { ChartColumn, ChartSpec, QueryRow } from "@dashboard-ia/shared";
-import { chartRecordSchema, chartSpecSchema } from "@dashboard-ia/shared";
+import type { ChartColumn, ChartSpec, QueryRow, QuerySpec } from "@dashboard-ia/shared";
+import { chartRecordSchema, chartSpecSchema, querySpecSchema } from "@dashboard-ia/shared";
 import { z } from "zod";
-import type { Prisma } from "@/prisma/generated/client.ts";
+import { Prisma } from "@/prisma/generated/client.ts";
 import { prisma } from "../db.ts";
 import { errors } from "../errors.ts";
-import { runGuardedQuery } from "../sql-guardrails/executor.ts";
+import { runQuerySpec } from "./semantic-query.service.ts";
 
 export const createChartSchema = z.object({
 	title: z.string().min(1).max(120),
 	description: z.string().max(500).nullable().optional(),
 	source: z.enum(["AI", "MANUAL"]).default("MANUAL"),
-	sqlQuery: z.string().min(1).max(10_000).nullable().optional(),
+	querySpec: querySpecSchema.nullable().optional(),
 	chartSpec: chartSpecSchema,
 	columns: z.array(z.object({ name: z.string(), type: z.enum(["string", "number", "date", "boolean"]) })),
 	rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))),
@@ -33,7 +33,7 @@ type ChartRow = {
 	chartType: string;
 	spec: Prisma.JsonValue;
 	source: string;
-	sqlQuery: string | null;
+	querySpec: Prisma.JsonValue;
 	presetId: string | null;
 	isPinned: boolean;
 	pinnedOrder: number | null;
@@ -49,7 +49,7 @@ export type ChartDto = {
 	description: string | null;
 	chartType: string;
 	source: string;
-	sqlQuery: string | null;
+	querySpec: QuerySpec | null;
 	presetId: string | null;
 	isPinned: boolean;
 	pinnedOrder: number | null;
@@ -62,9 +62,13 @@ export type ChartDto = {
 	updatedAt: string;
 };
 
-/** `spec` é Json no banco; só sai daqui depois de passar pelo zod. */
+/**
+ * `spec` e `querySpec` são Json no banco; só saem daqui depois de passar pelo zod.
+ * Um `querySpec` que não valida mais vira dataset estático em vez de quebrar a galeria.
+ */
 function toDto(chart: ChartRow): ChartDto {
 	const record = chartRecordSchema.parse(chart.spec);
+	const querySpec = querySpecSchema.safeParse(chart.querySpec);
 
 	return {
 		id: chart.id,
@@ -72,7 +76,7 @@ function toDto(chart: ChartRow): ChartDto {
 		description: chart.description,
 		chartType: chart.chartType,
 		source: chart.source,
-		sqlQuery: chart.sqlQuery,
+		querySpec: querySpec.success ? querySpec.data : null,
 		presetId: chart.presetId,
 		isPinned: chart.isPinned,
 		pinnedOrder: chart.pinnedOrder,
@@ -139,7 +143,7 @@ export async function createChart(input: CreateChartInput): Promise<ChartDto> {
 			description: input.description ?? null,
 			chartType: input.chartSpec.chartType,
 			source: input.source,
-			sqlQuery: input.sqlQuery ?? null,
+			querySpec: input.querySpec ?? Prisma.DbNull,
 			presetId: input.presetId ?? null,
 			isPinned,
 			pinnedOrder: await resolvePinning(isPinned, input.pinnedOrder, null),
@@ -166,7 +170,7 @@ export async function updateChart(id: string, input: UpdateChartInput): Promise<
 			title: input.title ?? current.title,
 			description: input.description === undefined ? current.description : input.description,
 			chartType: chartSpec.chartType,
-			sqlQuery: input.sqlQuery === undefined ? current.sqlQuery : input.sqlQuery,
+			querySpec: (input.querySpec === undefined ? current.querySpec : input.querySpec) ?? Prisma.DbNull,
 			presetId: input.presetId === undefined ? current.presetId : input.presetId,
 			isPinned,
 			pinnedOrder: await resolvePinning(isPinned, input.pinnedOrder, current.pinnedOrder),
@@ -202,20 +206,19 @@ export async function deleteChart(id: string): Promise<void> {
 }
 
 /**
- * Reexecuta o SELECT salvo e atualiza o cache de linhas — o que persiste é a
+ * Recompila o QuerySpec salvo e atualiza o cache de linhas — o que persiste é a
  * consulta, não o dado, então reabrir um gráfico traz números frescos.
  */
 export async function runChart(id: string): Promise<ChartDto> {
 	const chart = await getChart(id);
 
-	if (!chart.sqlQuery) throw errors.validation("Este gráfico não tem consulta associada.");
+	if (!chart.querySpec) throw errors.validation("Este gráfico não tem consulta associada.");
 
-	const result = await runGuardedQuery(chart.sqlQuery);
+	const { result } = await runQuerySpec(chart.querySpec);
 
 	const updated = await prisma.chart.update({
 		where: { id },
 		data: {
-			sqlQuery: result.sql,
 			datasetCacheAt: new Date(),
 			spec: { chartSpec: chart.chartSpec, columns: result.columns, rows: result.rows },
 		},

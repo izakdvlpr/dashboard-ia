@@ -1,5 +1,5 @@
-import type { ChartColumn, ChartSpec, QueryRow } from "@dashboard-ia/shared";
-import { chartColumnSchema, chartSpecSchema } from "@dashboard-ia/shared";
+import type { ChartColumn, ChartSpec, QueryRow, QuerySpec } from "@dashboard-ia/shared";
+import { chartColumnSchema, chartSpecSchema, querySpecSchema } from "@dashboard-ia/shared";
 import { z } from "zod";
 import { generate } from "../ai/gateway.ts";
 import { answerSystemPrompt, answerUserPrompt } from "../ai/prompts.ts";
@@ -7,18 +7,17 @@ import { answerOutputSchema, type QuestionRoute } from "../ai/schemas.ts";
 import { prisma } from "../db.ts";
 import { env } from "../env.ts";
 import { errors } from "../errors.ts";
-import type { QueryResult } from "../sql-guardrails/executor.ts";
+import type { QueryResult } from "../semantic/executor.ts";
 import { buildChartSpec } from "./chart-spec.service.ts";
 import { assertSafePrompt } from "./guardrail.service.ts";
 import { answerChitchat, classifyQuestion } from "./question-router.service.ts";
-import { textToSql } from "./text-to-sql.service.ts";
+import { questionToQuery } from "./semantic-query.service.ts";
 
 export type ChatStep =
 	| "guardrail_checked"
 	| "classified"
 	| "answered"
-	| "sql_generated"
-	| "sql_validated"
+	| "spec_generated"
 	| "query_executed"
 	| "chart_generated";
 
@@ -27,8 +26,7 @@ export type ChatAnswer = {
 	messageId: string;
 	question: string;
 	route: QuestionRoute;
-	sql: string;
-	rawSql: string;
+	querySpec: QuerySpec | null;
 	explanation: string;
 	answer: string;
 	columns: QueryResult["columns"];
@@ -66,8 +64,7 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 			messageId: message.id,
 			question,
 			route,
-			sql: "",
-			rawSql: "",
+			querySpec: null,
 			explanation: "",
 			answer,
 			columns: [],
@@ -81,7 +78,7 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 		};
 	}
 
-	const { result, rawSql, explanation, chartHint, attempts } = await textToSql(question);
+	const { result, spec, explanation, chartHint, attempts } = await questionToQuery(question);
 
 	// Rota `table` não chama o modelo de gráfico; o usuário pede depois via `generateChartForMessage`.
 	const [chart, answer] = await Promise.all([
@@ -94,7 +91,7 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 			conversationId: conversation.id,
 			role: "ASSISTANT",
 			content: answer,
-			sql: result.sql,
+			querySpec: spec,
 			resultJson: {
 				columns: result.columns,
 				rows: result.rows,
@@ -107,13 +104,7 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 
 	await touchConversation(conversation.id);
 
-	const steps: ChatStep[] = [
-		"guardrail_checked",
-		"classified",
-		"sql_generated",
-		"sql_validated",
-		"query_executed",
-	];
+	const steps: ChatStep[] = ["guardrail_checked", "classified", "spec_generated", "query_executed"];
 
 	if (chart) steps.push("chart_generated");
 
@@ -122,8 +113,7 @@ export async function ask(question: string, conversationId?: string): Promise<Ch
 		messageId: message.id,
 		question,
 		route,
-		sql: result.sql,
-		rawSql,
+		querySpec: spec,
 		explanation,
 		answer,
 		columns: result.columns,
@@ -141,7 +131,7 @@ export type GeneratedChart = { chartSpec: ChartSpec; chartFallback: boolean };
 
 /**
  * Gráfico sob demanda para uma resposta da rota `table`. Reusa as linhas salvas
- * — não roda SQL de novo — e é idempotente: clique duplo não gasta modelo.
+ * — não consulta o banco de novo — e é idempotente: clique duplo não gasta modelo.
  */
 export async function generateChartForMessage(messageId: string): Promise<GeneratedChart> {
 	const message = await prisma.chatMessage.findUnique({ where: { id: messageId } });
@@ -249,7 +239,7 @@ export type ChatMessageView = {
 	id: string;
 	role: string;
 	content: string;
-	sql: string | null;
+	querySpec: QuerySpec | null;
 	columns: ChartColumn[];
 	rows: QueryRow[];
 	chartSpec: ChartSpec | null;
@@ -283,12 +273,13 @@ export async function getConversation(id: string): Promise<ConversationView | nu
 		updatedAt: conversation.updatedAt.toISOString(),
 		messages: conversation.messages.map((message) => {
 			const parsed = messageResultSchema.safeParse(message.resultJson);
+			const spec = querySpecSchema.safeParse(message.querySpec);
 
 			return {
 				id: message.id,
 				role: message.role,
 				content: message.content,
-				sql: message.sql,
+				querySpec: spec.success ? spec.data : null,
 				columns: parsed.success ? parsed.data.columns : [],
 				rows: parsed.success ? parsed.data.rows : [],
 				chartSpec: parsed.success ? parsed.data.chartSpec : null,

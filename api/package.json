@@ -13,16 +13,17 @@
 		"db:push": "dotenv -e ../.env -- prisma db push",
 		"db:studio": "dotenv -e ../.env -- prisma studio",
 		"db:seed": "dotenv -e ../.env -- tsx prisma/seed.ts",
+		"mcp": "dotenv -e ../.env -- tsx src/mcp/server.ts",
 		"db:readonly": "dotenv -e ../.env -- sh -c 'psql \"$DATABASE_URL\" -f prisma/sql/readonly-role.sql'"
 	},
 	"dependencies": {
 		"@dashboard-ia/shared": "workspace:*",
+		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@prisma/adapter-pg": "^7.9.1",
 		"@prisma/client": "^7.9.1",
 		"ai": "^7.0.155",
 		"cors": "^2.8.5",
 		"express": "^5.2.1",
-		"node-sql-parser": "^5.4.0",
 		"ollama": "^0.6.4",
 		"pg": "^8.16.3",
 		"zod": "^4.3.6"

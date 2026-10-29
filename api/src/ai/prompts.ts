@@ -1,6 +1,5 @@
-import type { ChartColumn, QueryRow } from "@dashboard-ia/shared";
-import { COLOR_TOKENS } from "@dashboard-ia/shared";
-import { MAX_ROWS } from "../sql-guardrails/allowlist.ts";
+import type { ChartColumn, QueryRow, SemanticCatalog } from "@dashboard-ia/shared";
+import { COLOR_TOKENS, MAX_ROWS } from "@dashboard-ia/shared";
 
 /**
  * Prompts em inglês, dados em português.
@@ -8,66 +7,112 @@ import { MAX_ROWS } from "../sql-guardrails/allowlist.ts";
  * títulos e rótulos em pt-BR.
  */
 
-export function sqlSystemPrompt(schemaBlock: string): string {
+export function querySpecSystemPrompt(catalog: SemanticCatalog): string {
+	const metrics = catalog.metrics.map((metric) => `  ${metric.key}: ${metric.description}`).join("\n");
+	const dimensions = catalog.dimensions
+		.map((dimension) => `  ${dimension.key}: ${dimension.description}`)
+		.join("\n");
+	const { filterValues } = catalog;
+
 	return [
-		"You are a PostgreSQL 13 analyst. Convert the user question into ONE read-only SQL query.",
+		"You translate a sales analytics question into a query specification (JSON). You never write SQL.",
+		`Today is ${new Date().toISOString().slice(0, 10)}.`,
 		"",
-		schemaBlock,
+		"Metrics (pick 1 to 3):",
+		metrics,
 		"",
-		"Hard rules:",
-		"  1. Output a single SELECT statement. No INSERT/UPDATE/DELETE/DDL, no semicolon, no comments.",
-		"  2. Only the tables listed above. Never touch information_schema or pg_catalog.",
-		`  3. Always end with an explicit LIMIT (max ${MAX_ROWS}).`,
-		'  4. Identifiers are camelCase and case-sensitive: always double-quote them ("placedAt", "unitPrice").',
-		"  5. Aggregate whenever the question is analytical; do not return raw rows unless asked.",
-		"  6. For time series use date_trunc + to_char(..., 'YYYY-MM') and order by the period ascending.",
-		"  7. Give every computed column a short snake_case alias in Portuguese (receita, pedidos, ticket_medio).",
-		"  8. UNION / INTERSECT / EXCEPT are not supported.",
+		"Dimensions for groupBy (pick 0 to 2):",
+		dimensions,
 		"",
-		"Answer fields:",
-		"  sql: the query.",
-		"  explanation: one short sentence in Brazilian Portuguese describing what the query returns.",
-		"  chartHint: best visualization for the result (line, area, bar, pie, scatter, funnel or table).",
+		"Filters (null when unused):",
+		`  status: ${filterValues.status.join(" | ")}`,
+		`  canal: ${filterValues.canal.join(" | ")}`,
+		`  regiao: exact names from ${filterValues.regiao.join(", ")}`,
+		`  categoria: exact names from ${filterValues.categoria.join(", ")}`,
+		"  produto: part of the product name, as the user wrote it",
+		"",
+		"Rules:",
+		"  1. If the question cannot be answered with these metrics and dimensions (or asks to change data),",
+		"     return metrics: [] and explain in `explanation` what you can answer instead.",
+		"  2. Canceled and refunded orders are excluded by default. Set includeCanceled only when the user asks",
+		"     for every order; to look at canceled orders, use the status filter instead.",
+		"  3. period: 7d, 30d, 90d, 12m, ytd or all. Use custom with dateFrom/dateTo (YYYY-MM-DD, inclusive)",
+		"     only for explicit dates or months. Default is 12m.",
+		"  4. funil must be the only metric, with groupBy [].",
+		"  5. orderBy is null unless the user asks for a ranking or order; it must reference a chosen metric or",
+		"     dimension. Time series are ordered chronologically automatically.",
+		`  6. limit between 1 and ${MAX_ROWS}: the N of a top-N question, otherwise 100.`,
+		"",
+		"Answer fields besides the spec:",
+		"  explanation: one short sentence in Brazilian Portuguese describing what the result shows.",
+		"  chartHint: best visualization (line, area, bar, pie, scatter, funnel or table).",
 		"",
 		"Examples:",
-		exampleBlock(
-			"qual foi a receita por mês no último ano?",
-			`SELECT to_char(date_trunc('month', o."placedAt"), 'YYYY-MM') AS mes, SUM(oi."quantity" * oi."unitPrice" - oi."discount") AS receita FROM "Order" o JOIN "OrderItem" oi ON oi."orderId" = o."id" WHERE o."status" NOT IN ('CANCELED', 'REFUNDED') AND o."placedAt" >= now() - interval '12 months' GROUP BY 1 ORDER BY 1 LIMIT 500`,
-			"Receita mensal dos últimos 12 meses.",
-			"line",
-		),
-		exampleBlock(
-			"quais os 5 produtos mais vendidos em quantidade?",
-			`SELECT p."name" AS produto, SUM(oi."quantity") AS unidades FROM "OrderItem" oi JOIN "Order" o ON o."id" = oi."orderId" JOIN "Product" p ON p."id" = oi."productId" WHERE o."status" NOT IN ('CANCELED', 'REFUNDED') GROUP BY p."name" ORDER BY unidades DESC LIMIT 5`,
-			"Cinco produtos com maior volume vendido.",
-			"bar",
-		),
-		exampleBlock(
-			"como a receita se divide entre as regiões?",
-			`SELECT r."name" AS regiao, SUM(oi."quantity" * oi."unitPrice" - oi."discount") AS receita FROM "Order" o JOIN "OrderItem" oi ON oi."orderId" = o."id" JOIN "Region" r ON r."id" = o."regionId" WHERE o."status" NOT IN ('CANCELED', 'REFUNDED') GROUP BY r."name" ORDER BY receita DESC LIMIT 50`,
-			"Receita total por região.",
-			"pie",
-		),
+		exampleBlock("qual foi a receita por mês no último ano?", {
+			metrics: ["receita"],
+			groupBy: ["mes"],
+			period: "12m",
+			explanation: "Receita mensal dos últimos 12 meses.",
+			chartHint: "line",
+		}),
+		exampleBlock("quais os 5 produtos mais vendidos em quantidade?", {
+			metrics: ["unidades"],
+			groupBy: ["produto"],
+			period: "all",
+			orderBy: { by: "unidades", dir: "desc" },
+			limit: 5,
+			explanation: "Cinco produtos com maior volume vendido.",
+			chartHint: "bar",
+		}),
+		exampleBlock("quantos pedidos cancelados tivemos por canal em março de 2026?", {
+			metrics: ["pedidos"],
+			groupBy: ["canal"],
+			filters: { status: ["CANCELED"] },
+			period: "custom",
+			dateFrom: "2026-03-01",
+			dateTo: "2026-03-31",
+			explanation: "Pedidos cancelados em março de 2026, por canal.",
+			chartHint: "bar",
+		}),
+		exampleBlock("como está o funil de pedidos?", {
+			metrics: ["funil"],
+			groupBy: [],
+			period: "12m",
+			explanation: "Pedidos que chegaram a cada etapa nos últimos 12 meses.",
+			chartHint: "funnel",
+		}),
 	].join("\n");
 }
 
-function exampleBlock(question: string, sql: string, explanation: string, chartHint: string): string {
-	return [`Q: ${question}`, `A: ${JSON.stringify({ sql, explanation, chartHint })}`, ""].join("\n");
+const EXAMPLE_DEFAULTS = {
+	filters: { status: null, canal: null, regiao: null, categoria: null, produto: null },
+	dateFrom: null,
+	dateTo: null,
+	includeCanceled: false,
+	orderBy: null,
+	limit: 100,
+};
+
+function exampleBlock(question: string, answer: Record<string, unknown>): string {
+	const filters = { ...EXAMPLE_DEFAULTS.filters, ...(answer.filters as Record<string, unknown> | undefined) };
+
+	return [`Q: ${question}`, `A: ${JSON.stringify({ ...EXAMPLE_DEFAULTS, ...answer, filters })}`, ""].join(
+		"\n",
+	);
 }
 
-/** Erro do guardrail ou do Postgres devolvido ao modelo na tentativa seguinte. */
-export function retryPrompt(question: string, badSql: string, reason: string): string {
+/** Erro de validação do spec devolvido ao modelo na tentativa seguinte. */
+export function retryPrompt(question: string, reason: string): string {
 	return [
-		"The previous query was rejected. Fix it and return the corrected JSON.",
+		"The previous specification was invalid. Fix it and return the corrected JSON.",
 		`Question: ${question}`,
-		`Rejected SQL: ${badSql}`,
 		`Reason: ${reason}`,
 	].join("\n");
 }
 
 export function chartSystemPrompt(): string {
 	return [
-		"You turn a SQL result into a chart specification for ECharts.",
+		"You turn a query result into a chart specification for ECharts.",
 		"",
 		"Hard rules:",
 		"  1. Every column you reference must exist in the provided column list, spelled exactly.",
@@ -102,7 +147,7 @@ export function chartUserPrompt(
 
 export function answerSystemPrompt(): string {
 	return [
-		"You explain a SQL result to a business user, in Brazilian Portuguese.",
+		"You explain a query result to a business user, in Brazilian Portuguese.",
 		"",
 		"Rules:",
 		"  1. Two or three sentences, no bullet lists, no markdown tables.",
@@ -163,7 +208,7 @@ export function chitchatSystemPrompt(): string {
 		"Rules:",
 		"  1. One or two short sentences, friendly and direct, no markdown.",
 		"  2. You can answer questions about revenue, orders, customers, products, categories and regions,",
-		"     showing the SQL, a chart and a table.",
+		"     showing a chart and a table.",
 		"  3. Never invent numbers or data. If the user seems to want data, suggest a concrete question,",
 		'     e.g. "qual foi a receita por mês no último ano?".',
 	].join("\n");

@@ -3,7 +3,7 @@ import { env } from "./env.ts";
 
 /**
  * Conexão separada, com a role `dashboard_ro`, usada SOMENTE para executar o
- * SQL gerado pela IA (ou colado no builder manual).
+ * SQL do compilador semântico (chat, builder e MCP).
  *
  * Deliberadamente um `pg.Pool` puro e não um segundo PrismaClient: a fronteira
  * de privilégio fica visível no import e é impossível chamar `.create()` /

@@ -8,7 +8,7 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Domínio e-commerce (dados fictícios) — únicas tabelas visíveis ao SQL da IA
+// Domínio e-commerce (dados fictícios) — únicas tabelas que o compilador semântico toca
 // ---------------------------------------------------------------------------
 
 model Region {
@@ -121,8 +121,8 @@ model OrderEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Estado do app — NUNCA acessível pelo SQL gerado pela IA
-// (fora do allowlist e sem GRANT para a role read-only)
+// Estado do app — NUNCA acessível pelas consultas dinâmicas
+// (fora do registry semântico e sem GRANT para a role read-only)
 // ---------------------------------------------------------------------------
 
 enum ChartSource {
@@ -138,8 +138,8 @@ model Chart {
   /// ChartRecord: { chartSpec, columns, rows }
   spec           Json
   source         ChartSource   @default(MANUAL)
-  /// SELECT sanitizado que produz o dataset (null = dataset estático)
-  sqlQuery       String?
+  /// QuerySpec que produz o dataset (null = dataset estático)
+  querySpec      Json?
   datasetCacheAt DateTime?
   presetId       String?
   preset         ChartPreset?  @relation(fields: [presetId], references: [id], onDelete: SetNull)
@@ -191,8 +191,8 @@ model ChatMessage {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           MessageRole
   content        String
-  /// SQL sanitizado desta rodada (apenas mensagens do assistente)
-  sql            String?
+  /// QuerySpec desta rodada (apenas mensagens do assistente)
+  querySpec      Json?
   /// { columns, rows } do resultado, para reabrir a conversa sem reexecutar
   resultJson     Json?
   chartId        String?
@@ -215,10 +215,10 @@ model QueryLog {
   chatMessage     ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
   question        String?
   attempt         Int          @default(1)
-  /// exatamente o que o modelo produziu
-  rawSql          String
-  /// o que de fato rodou, pós-guardrails (null se rejeitado)
-  sanitizedSql    String?
+  /// exatamente o que o modelo produziu (QuerySpec flat + explanation)
+  rawOutput       Json
+  /// SQL que o compilador gerou, só para observabilidade (null se rejeitado)
+  compiledSql     String?
   status          QueryStatus
   rejectionReason String?
   rowCount        Int?

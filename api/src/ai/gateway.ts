@@ -2,11 +2,13 @@ import {
 	APICallError,
 	createGateway,
 	generateText,
+	jsonSchema,
 	NoObjectGeneratedError,
 	NoOutputGeneratedError,
 	Output,
+	zodSchema,
 } from "ai";
-import type { z } from "zod";
+import { z } from "zod";
 import { env } from "../env.ts";
 import { errors } from "../errors.ts";
 
@@ -23,6 +25,51 @@ type GenerateInput<SCHEMA extends z.ZodType> = {
 	temperature?: number;
 	timeoutMs?: number;
 };
+
+/**
+ * Modelo menor costuma omitir a chave em vez de mandar `null` (ex.: `filters: {}`).
+ * Completa com `null` só onde o schema aceita `null`; o resto segue para o zod.
+ */
+function fillMissingNulls(schema: z.ZodType, value: unknown): unknown {
+	if (schema instanceof z.ZodNullable) {
+		return value === null ? null : fillMissingNulls(schema.unwrap() as z.ZodType, value);
+	}
+
+	if (schema instanceof z.ZodArray && Array.isArray(value)) {
+		return value.map((item) => fillMissingNulls(schema.element as z.ZodType, item));
+	}
+
+	if (schema instanceof z.ZodObject && value && typeof value === "object" && !Array.isArray(value)) {
+		const record = value as Record<string, unknown>;
+		const filled: Record<string, unknown> = { ...record };
+
+		for (const [key, field] of Object.entries(schema.shape as Record<string, z.ZodType>)) {
+			filled[key] =
+				record[key] === undefined && field instanceof z.ZodNullable
+					? null
+					: fillMissingNulls(field, record[key]);
+		}
+
+		return filled;
+	}
+
+	return value;
+}
+
+/** JSON Schema estrito para o provider (toda chave em `required`); validação tolerante a chave nullable omitida. */
+async function lenientOutput<SCHEMA extends z.ZodType>(schema: SCHEMA) {
+	return Output.object<z.infer<SCHEMA>>({
+		schema: jsonSchema<z.infer<SCHEMA>>(await zodSchema(schema).jsonSchema, {
+			validate: (value) => {
+				const parsed = schema.safeParse(fillMissingNulls(schema, value));
+
+				return parsed.success
+					? { success: true, value: parsed.data }
+					: { success: false, error: parsed.error };
+			},
+		}),
+	});
+}
 
 /**
  * Uma chamada sem streaming com saída estruturada. Todas as chamadas do app
@@ -42,7 +89,7 @@ export async function generate<SCHEMA extends z.ZodType>({
 			model: gateway(model),
 			instructions,
 			messages,
-			output: Output.object<z.infer<SCHEMA>>({ schema }),
+			output: await lenientOutput(schema),
 			temperature,
 			abortSignal: AbortSignal.timeout(timeoutMs),
 		});

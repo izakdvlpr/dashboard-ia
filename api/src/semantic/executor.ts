@@ -1,9 +1,8 @@
 import type { ChartColumn, ColumnType, QueryRow } from "@dashboard-ia/shared";
+import { MAX_ROWS } from "@dashboard-ia/shared";
 import pg from "pg";
+import type { Prisma } from "@/prisma/generated/client.ts";
 import { readonlyPool } from "../db-readonly.ts";
-import { getColumnMap } from "../services/schema-catalog.service.ts";
-import { MAX_ROWS } from "./allowlist.ts";
-import { validateSql } from "./validator.ts";
 
 // numeric/int8 chegam como string no driver pg — converte para number.
 pg.types.setTypeParser(pg.types.builtins.NUMERIC, (value) => Number.parseFloat(value));
@@ -45,7 +44,6 @@ function normalizeCell(value: unknown): string | number | boolean | null {
 }
 
 export type QueryResult = {
-	sql: string;
 	columns: ChartColumn[];
 	rows: QueryRow[];
 	rowCount: number;
@@ -53,14 +51,11 @@ export type QueryResult = {
 };
 
 /**
- * Valida e executa. A conexão usa a role `dashboard_ro`; a transação é
- * explicitamente read-only e tem statement_timeout próprio, de modo que uma
- * falha nos guardrails ainda não resulta em escrita nem em leitura indevida.
+ * Executa um SELECT saído do compilador semântico. A conexão usa a role
+ * `dashboard_ro`; a transação é explicitamente read-only e tem
+ * statement_timeout próprio — defesa em profundidade caso o registry erre.
  */
-export async function runGuardedQuery(input: string): Promise<QueryResult> {
-	const columnMap = await getColumnMap();
-	const { sql } = validateSql(input, columnMap);
-
+export async function runQuery(sql: Prisma.Sql): Promise<QueryResult> {
 	const client = await readonlyPool.connect();
 	const startedAt = Date.now();
 
@@ -68,7 +63,7 @@ export async function runGuardedQuery(input: string): Promise<QueryResult> {
 		await client.query("BEGIN READ ONLY");
 		await client.query("SET LOCAL statement_timeout = '5s'");
 
-		const result = await client.query({ text: sql, rowMode: "array" });
+		const result = await client.query({ text: sql.text, values: sql.values, rowMode: "array" });
 
 		await client.query("COMMIT");
 
@@ -89,7 +84,7 @@ export async function runGuardedQuery(input: string): Promise<QueryResult> {
 			return row;
 		});
 
-		return { sql, columns, rows, rowCount: rows.length, durationMs: Date.now() - startedAt };
+		return { columns, rows, rowCount: rows.length, durationMs: Date.now() - startedAt };
 	} catch (error) {
 		await client.query("ROLLBACK").catch(() => undefined);
 		throw error;

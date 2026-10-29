@@ -1,8 +1,8 @@
 export type ErrorCode =
 	| "VALIDATION_ERROR"
 	| "NOT_FOUND"
-	| "SQL_REJECTED"
-	| "SQL_EXECUTION_ERROR"
+	| "QUERY_REJECTED"
+	| "QUERY_EXECUTION_ERROR"
 	| "AI_UNAVAILABLE"
 	| "AI_INVALID_OUTPUT"
 	| "PROMPT_BLOCKED"
@@ -25,8 +25,9 @@ export class AppError extends Error {
 export const errors = {
 	validation: (message: string, details?: unknown) => new AppError("VALIDATION_ERROR", message, 400, details),
 	notFound: (what: string) => new AppError("NOT_FOUND", `${what} não encontrado.`, 404),
-	sqlRejected: (message: string, details?: unknown) => new AppError("SQL_REJECTED", message, 400, details),
-	sqlExecution: (message: string) => new AppError("SQL_EXECUTION_ERROR", message, 400),
+	queryRejected: (message: string, details?: unknown) =>
+		new AppError("QUERY_REJECTED", message, 400, details),
+	queryExecution: (message: string) => new AppError("QUERY_EXECUTION_ERROR", message, 500),
 	aiUnavailable: (message: string) => new AppError("AI_UNAVAILABLE", message, 503),
 	aiInvalidOutput: (message: string, details?: unknown) =>
 		new AppError("AI_INVALID_OUTPUT", message, 502, details),

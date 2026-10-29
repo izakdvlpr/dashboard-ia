@@ -26,12 +26,12 @@ type AiStatus = {
 	up: boolean;
 	/** true quando os modelos configurados existem no catálogo do Gateway */
 	available: boolean;
-	models: { sql: string; chart: string; classifier: string; simple: string };
+	models: { query: string; chart: string; classifier: string; simple: string };
 };
 
 async function checkAi(): Promise<AiStatus> {
 	const models = {
-		sql: env.AI_SQL_MODEL,
+		query: env.AI_QUERY_MODEL,
 		chart: env.AI_CHART_MODEL,
 		classifier: env.AI_CLASSIFIER_MODEL,
 		simple: env.AI_SIMPLE_MODEL,

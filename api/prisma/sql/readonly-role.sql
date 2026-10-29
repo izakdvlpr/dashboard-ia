@@ -1,5 +1,5 @@
--- Role read-only usada exclusivamente para executar o SQL gerado pela IA.
--- Defesa em profundidade: mesmo que o allowlist do parser falhe, o banco recusa
+-- Role read-only usada exclusivamente para executar as consultas do compilador semântico.
+-- Defesa em profundidade: mesmo que o registry tenha um erro, o banco recusa
 -- qualquer escrita e qualquer leitura das tabelas de estado do app.
 
 DO $$

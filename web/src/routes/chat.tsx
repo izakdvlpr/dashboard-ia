@@ -1,4 +1,4 @@
-import type { ChartColumn, ChartSpec, QueryRow } from "@dashboard-ia/shared";
+import type { ChartColumn, ChartSpec, QueryRow, QuerySpec } from "@dashboard-ia/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { BookmarkIcon, ChartColumnIcon, LoaderIcon, SendIcon, SparklesIcon } from "lucide-react";
@@ -6,8 +6,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ChartCard } from "@/components/charts/chart-card.tsx";
 import { ConversationList } from "@/components/chat/conversation-list.tsx";
+import { QuerySpecBlock } from "@/components/chat/query-spec-block.tsx";
 import { ResultTable } from "@/components/chat/result-table.tsx";
-import { SqlBlock } from "@/components/chat/sql-block.tsx";
 import { PageHeader } from "@/components/layout/app-shell.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { type ApiError, type ChatResponse, type ConversationView, chartsApi, chatApi } from "@/lib/api.ts";
@@ -28,7 +28,7 @@ const SUGGESTIONS = [
 type AnswerView = {
 	messageId: string;
 	answer: string;
-	sql: string;
+	querySpec: QuerySpec | null;
 	columns: ChartColumn[];
 	rows: QueryRow[];
 	chartSpec: ChartSpec | null;
@@ -44,7 +44,7 @@ function toAnswerView(data: ChatResponse): AnswerView {
 	return {
 		messageId: data.messageId,
 		answer: data.answer,
-		sql: data.sql,
+		querySpec: data.querySpec,
 		columns: data.columns,
 		rows: data.rows,
 		chartSpec: data.chartSpec,
@@ -71,7 +71,7 @@ function toTurns(conversation: ConversationView): Turn[] {
 		current.answer = {
 			messageId: message.id,
 			answer: message.content,
-			sql: message.sql ?? "",
+			querySpec: message.querySpec,
 			columns: message.columns,
 			rows: message.rows,
 			chartSpec: message.chartSpec,
@@ -120,7 +120,7 @@ function ChatPage() {
 			return chartsApi.create({
 				title: view.chartSpec.title,
 				source: "AI",
-				sqlQuery: view.sql,
+				querySpec: view.querySpec,
 				chartSpec: view.chartSpec,
 				columns: view.columns,
 				rows: view.rows,
@@ -176,7 +176,7 @@ function ChatPage() {
 			<div className="flex min-w-0 flex-1 flex-col">
 				<PageHeader
 					title="Chatbot"
-					description="Pergunte em português — a IA gera o SQL, os guardrails validam e o Postgres responde."
+					description="Pergunte em português — a IA escolhe métricas e filtros do catálogo, nunca escreve SQL."
 				/>
 
 				<div className="flex-1 space-y-6 overflow-y-auto px-4 py-6 md:px-8">
@@ -262,7 +262,7 @@ function TurnBlock({
 	const canGenerateChart =
 		answer !== undefined &&
 		!answer.chartSpec &&
-		answer.sql !== "" &&
+		answer.querySpec !== null &&
 		answer.rows.length >= 2 &&
 		answer.columns.length >= 2;
 
@@ -282,7 +282,7 @@ function TurnBlock({
 				<div className="space-y-3">
 					<p className="text-sm leading-relaxed">{answer.answer}</p>
 
-					{answer.sql ? <SqlBlock sql={answer.sql} attempts={answer.attempts} /> : null}
+					{answer.querySpec ? <QuerySpecBlock spec={answer.querySpec} attempts={answer.attempts} /> : null}
 
 					{answer.chartSpec ? (
 						<ChartCard
@@ -315,7 +315,7 @@ function TurnBlock({
 						</div>
 					) : null}
 
-					{answer.sql ? (
+					{answer.querySpec ? (
 						<p className="text-muted-foreground font-mono text-xs tabular-nums">
 							{answer.rowCount ?? answer.rows.length} linhas
 							{answer.durationMs === undefined ? "" : ` · ${answer.durationMs} ms`}
