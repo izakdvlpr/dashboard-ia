@@ -3,7 +3,8 @@
 BI: dashboards ECharts sobre dados fictícios de e-commerce, chatbot que traduz pergunta em pt-BR para uma consulta
 semântica (via Vercel AI Gateway) — a IA nunca escreve SQL — e construtor manual de gráficos com presets de estilo.
 
-Postgres em container, API Express e SPA Vite rodam na máquina; o LLM é chamado pelo Vercel AI Gateway.
+Postgres em container, API Express e SPA Vite rodam na máquina; os modelos rodam no Vercel AI Gateway, exceto o guardrail,
+que roda local no Ollama.
 
 ## Stack
 
@@ -13,9 +14,19 @@ Postgres em container, API Express e SPA Vite rodam na máquina; o LLM é chamad
 | `api` | Express 5, zod 4, Prisma 7 (`@prisma/adapter-pg`), `@modelcontextprotocol/sdk` |
 | `shared` | ChartSpec, QuerySpec, Preset e `mergeOption` — fonte da verdade dos dois lados |
 | dados | Postgres 13 (docker-compose, porta 42069) |
-| LLM | Vercel AI Gateway via AI SDK (`ai`), `mistral/mistral-nemo` por padrão, structured output com zod |
+| LLM | Vercel AI Gateway via AI SDK (`ai`) + Ollama local (guardrail), um modelo por etapa, structured output com zod |
 
 ## Setup
+
+Além de Bun e Docker, é preciso ter o [Ollama](https://ollama.com/download) instalado: o guardrail roda local
+nele, e sem ele o chat não responde. Depois de instalar, baixe o modelo e deixe o Ollama rodando (o app já sobe o
+servidor em `http://localhost:11434`; pelo terminal, `ollama serve`):
+
+```bash
+ollama pull granite3-guardian:8b
+```
+
+Se o Ollama estiver em outra máquina ou porta, ajuste `OLLAMA_BASE_URL` no `.env`.
 
 ```bash
 bun install
@@ -27,14 +38,64 @@ bun run dev          # api :3333 + web :5173
 `bun run setup` executa `db:up`, `db:migrate`, `db:seed` e `db:readonly`. O seed gera ~24 meses de e-commerce
 (8 regiões, 12 categorias, ~400 produtos, ~3.000 clientes, ~25.000 pedidos) com sazonalidade.
 
-Os modelos ficam em `AI_QUERY_MODEL` (geração do QuerySpec) e `AI_CHART_MODEL` (ChartSpec e resposta em texto),
-com defaults em `api/src/env.ts`. Qualquer id do catálogo do Gateway com suporte a structured output serve.
+## Como a IA funciona
+
+```mermaid
+flowchart TD
+    Q(["💬 Pergunta do usuário"]) --> G
+
+    G["🛡️ Guardrail<br/><b>granite3-guardian:8b</b><br/>pergunta é segura?"]
+    G -- "não" --> X(["⛔ Bloqueada"])
+    G -- "sim" --> C
+
+    C["🧭 Classificador<br/><b>amazon/nova-micro</b><br/>que tipo de pergunta é?"]
+    C -- "conversa" --> S["💡 Resposta simples<br/><b>openai/gpt-4.1-nano</b>"]
+    C -- "tabela ou gráfico" --> QS
+
+    QS["🧩 Gerador de consulta<br/><b>alibaba/qwen3-coder-30b-a3b</b><br/>escolhe métricas, filtros e período"]
+    QS -- "resposta inválida:<br/>corrige 1 vez" --> QS
+    QS --> DB
+
+    DB["🗄️ Monta o SQL e consulta o banco<br/>sem IA · só leitura"]
+    DB --> R["📝 Resumo em texto<br/><b>openai/gpt-4.1-nano</b>"]
+    DB -- "se pediu gráfico" --> CH["📊 Monta o gráfico<br/><b>openai/gpt-4.1-nano</b>"]
+
+    S --> F(["✅ Resposta no chat"])
+    R --> F
+    CH --> F
+
+    classDef local fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef cloud fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef noai fill:#f3f4f6,stroke:#6b7280,color:#111827
+    classDef stop fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+
+    class G local
+    class C,S,QS,R,CH cloud
+    class DB noai
+    class X stop
+```
+
+🟩 IA local (Ollama) · 🟦 IA na nuvem (Vercel AI Gateway) · ⬜ sem IA
+
+| Etapa | Variável | Default | Onde roda |
+|---|---|---|---|
+| Guardrail (barra pergunta perigosa) | `AI_GUARDRAIL_MODEL` | `granite3-guardian:8b` | Ollama local |
+| Classificador (conversa, tabela ou gráfico) | `AI_CLASSIFIER_MODEL` | `amazon/nova-micro` | AI Gateway |
+| Gerador de consulta (`QuerySpec`) | `AI_QUERY_MODEL` | `alibaba/qwen3-coder-30b-a3b` | AI Gateway |
+| Gráfico (`ChartSpec`) | `AI_CHART_MODEL` | `openai/gpt-4.1-nano` | AI Gateway |
+| Resposta simples e resumo | `AI_SIMPLE_MODEL` | `openai/gpt-4.1-nano` | AI Gateway |
+
+Defaults em `api/src/env.ts`. Nas etapas do Gateway, qualquer id do catálogo com suporte a structured output serve.
+O guardrail precisa do Ollama rodando com o modelo baixado (ver [Setup](#setup)); se o Ollama estiver fora do ar,
+o chat responde 503 em vez de liberar a pergunta.
 
 ## Como o chatbot chega no banco
 
 A IA não vê tabela nem coluna: escolhe chaves de um catálogo fechado (`shared/src/query-spec.ts`) — métricas
 (`receita`, `pedidos`, `ticket_medio`, `funil`…), até 2 agrupamentos (`mes`, `regiao`, `categoria`…), filtros,
 período, ordenação e limite. O SQL de cada chave é escrito à mão em `api/src/semantic/registry.ts`.
+
+Depois do guardrail e do classificador, nas rotas de tabela e gráfico:
 
 1. Pergunta + catálogo semântico → modelo devolve um `QuerySpec` + `explanation` + `chartHint`.
 2. O spec passa pelo zod do `shared`; se falhar, o erro volta ao modelo uma vez. `metrics: []` = pergunta fora
